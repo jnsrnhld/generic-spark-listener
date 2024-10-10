@@ -2,6 +2,7 @@ package de.tu_berlin.jarnhold.listener
 
 import de.tu_berlin.jarnhold.listener.EventType.EventType
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.{DefaultFormats, Formats}
 import org.slf4j.{Logger, LoggerFactory}
@@ -36,7 +37,10 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    this.sparkContext = SparkContext.getOrCreate(this.sparkConf);
+    this.sparkContext = SparkSession.getActiveSession match {
+      case Some(session) => session.sparkContext
+      case None => throw new IllegalStateException("No active SparkSession found!")
+    }
     logger.info("SparkContext successfully registered in CentralizedSparkListener")
   }
 
