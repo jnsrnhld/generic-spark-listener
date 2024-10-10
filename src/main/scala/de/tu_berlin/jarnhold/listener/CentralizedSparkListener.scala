@@ -2,7 +2,6 @@ package de.tu_berlin.jarnhold.listener
 
 import de.tu_berlin.jarnhold.listener.EventType.EventType
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.{DefaultFormats, Formats}
 import org.slf4j.{Logger, LoggerFactory}
@@ -36,14 +35,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.sparkContext = sparkContext
   }
 
-  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    this.sparkContext = SparkSession.getActiveSession match {
-      case Some(session) => session.sparkContext
-      case None => throw new IllegalStateException("No active SparkSession found!")
-    }
-    logger.info("SparkContext successfully registered in CentralizedSparkListener")
-  }
-
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     if (!this.active) {
       return
@@ -63,6 +54,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     if (!this.active) {
       return
     }
+
+    ensureSparkContextIsSet()
     val jobDuration = jobEnd.time
     val response = sendMessage(jobDuration, EventType.JOB_END)
 
@@ -141,5 +134,16 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       event_type = eventType
     )
     this.zeroMQClient.sendMessage(message)
+  }
+
+  /**
+   * Only call after ApplicationStart: Otherwise a second SparkContext will be created which will eventually crash
+   * the application execution.
+   */
+  private def ensureSparkContextIsSet(): Unit = {
+    if (this.sparkContext == null) {
+      this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
+      logger.info("SparkContext successfully registered in CentralizedSparkListener")
+    }
   }
 }
