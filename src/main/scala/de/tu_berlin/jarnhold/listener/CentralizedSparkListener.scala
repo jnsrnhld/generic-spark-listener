@@ -3,7 +3,6 @@ package de.tu_berlin.jarnhold.listener
 import de.tu_berlin.jarnhold.listener.EventType.EventType
 import org.apache.spark.scheduler._
 import org.apache.spark.{SparkConf, SparkContext}
-import org.json4s.{DefaultFormats, Formats}
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -20,8 +19,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   // Setup communication
   checkConfigurations()
-  implicit val formats: Formats = DefaultFormats
-  private val zeroMQClient = new ZeroMQClient(bridgeServiceAddress)(formats)
+  private val zeroMQClient = new ZeroMQClient(bridgeServiceAddress)
 
   // Application parameters
   private val appSignature: String = sparkConf.get("spark.app.name")
@@ -43,6 +41,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val jobId = jobStart.jobId
     this.currentJobId.set(jobId)
     if (jobId == 0) {
+      ensureSparkContextIsSet()
       handleScaleOutMonitoring(None)
     }
 
@@ -55,10 +54,10 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       return
     }
 
-    ensureSparkContextIsSet()
     val jobDuration = jobEnd.time
     val response = sendMessage(jobDuration, EventType.JOB_END)
 
+    handleScaleOutMonitoring(Option(getDriverHost))
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
       logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
@@ -73,14 +72,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
     sendMessage(applicationEnd.time, EventType.APPLICATION_END)
     this.zeroMQClient.close()
-  }
-
-  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-    handleScaleOutMonitoring(Option(executorAdded.executorInfo.executorHost))
-  }
-
-  override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-    handleScaleOutMonitoring(Option("NO_HOST"))
   }
 
   private def handleScaleOutMonitoring(executorHost: Option[String]): Unit = {
@@ -103,7 +94,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def getInitialScaleOutCount(executorHost: String): Int = {
     val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
-    val driverHost: String = this.sparkContext.getConf.get("spark.driver.host")
+    val driverHost: String = getDriverHost
     allExecutors
       .filter(!_.split(":")(0).equals(driverHost))
       .filter(!_.split(":")(0).equals(executorHost.split(":")(0)))
@@ -145,5 +136,12 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
       logger.info("SparkContext successfully registered in CentralizedSparkListener")
     }
+  }
+
+  /**
+   * Ensure spark context is set before calling.
+   */
+  private def getDriverHost = {
+    this.sparkContext.getConf.get("spark.driver.host")
   }
 }

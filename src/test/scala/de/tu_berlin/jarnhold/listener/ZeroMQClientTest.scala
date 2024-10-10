@@ -1,7 +1,7 @@
 package de.tu_berlin.jarnhold.listener
 
+import de.tu_berlin.jarnhold.listener.JsonFormats.formats
 import org.json4s.native.Serialization
-import org.json4s.{DefaultFormats, Formats}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
@@ -10,8 +10,6 @@ import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import scala.concurrent.Await
 
 class ZeroMQClientTest extends AnyFunSuite with Matchers {
-
-  implicit val formats: Formats = DefaultFormats
 
   test("ZeroMQClient should send and receive messages correctly") {
     val port = 5556 // Use a test port

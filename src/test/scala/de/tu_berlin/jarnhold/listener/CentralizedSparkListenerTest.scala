@@ -14,7 +14,7 @@ import scala.concurrent.Await
 
 class CentralizedSparkListenerTest extends AnyFunSuite with Matchers with MockitoSugar {
 
-  implicit val formats: Formats = DefaultFormats
+  implicit val formats: Formats = DefaultFormats + EventTypeSerializer
 
   test("CentralizedSparkListener should handle job start and end events") {
     val port = 5558
@@ -25,10 +25,11 @@ class CentralizedSparkListenerTest extends AnyFunSuite with Matchers with Mockit
     sparkConf.set("spark.app.name", "Test Application")
     sparkConf.set("spark.customExtraListener.bridgeServiceAddress", bridgeServiceAddress)
     sparkConf.set("spark.customExtraListener.isAdaptive", "true")
+    sparkConf.set("spark.driver.host", "localhost[*]")
 
     val sparkContext = mock[SparkContext]
     when(sparkContext.requestTotalExecutors(any[Int], any[Int], any[Map[String, Int]])).thenReturn(true)
-    when(sparkContext.getExecutorMemoryStatus).thenReturn(Map.empty)
+    when(sparkContext.getExecutorMemoryStatus).thenReturn(Map("executor1" -> (123456789L, 987654321L)))
     when(sparkContext.getConf).thenReturn(sparkConf)
 
     // Start ZeroMQTestServer
