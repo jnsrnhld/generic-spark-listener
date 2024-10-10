@@ -7,7 +7,7 @@ lazy val root = (project in file("."))
   )
 
 libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.16"
-libraryDependencies += "org.apache.spark" %% "spark-core" % "3.5.3"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "3.5.3" % "provided"
 libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.5.3" % "provided"
 libraryDependencies += "org.zeromq" % "jeromq" % "0.6.0"
 libraryDependencies += "org.json4s" %% "json4s-native" % "4.0.7"

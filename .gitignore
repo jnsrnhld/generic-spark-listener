@@ -42,5 +42,5 @@ build/
 
 ### Scala ###
 .bsp/
-target/
 project/
+!project/plugins.sbt

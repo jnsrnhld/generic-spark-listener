@@ -37,6 +37,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
     this.sparkContext = SparkContext.getOrCreate(this.sparkConf);
+    logger.info("SparkContext successfully registered in CentralizedSparkListener")
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -115,6 +116,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def checkConfigurations(): Unit = {
     val parametersList = List(
+      "spark.customExtraListener.isAdaptive",
       "spark.customExtraListener.bridgeServiceAddress"
     )
     logger.info("Current spark conf" + sparkConf.toDebugString)
