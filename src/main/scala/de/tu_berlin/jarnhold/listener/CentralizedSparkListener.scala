@@ -1,14 +1,14 @@
 package de.tu_berlin.jarnhold.listener
 
+import de.tu_berlin.jarnhold.listener.EventType.EventType
 import org.apache.spark.scheduler._
 import org.apache.spark.{SparkConf, SparkContext}
+import org.json4s.{DefaultFormats, Formats}
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.util.concurrent.atomic.AtomicInteger
-import EventType.EventType
-import org.json4s.{DefaultFormats, Formats};
 
-class CentralizedSparkListener(sparkConf: SparkConf, sparkContext: SparkContext) extends SparkListener {
+class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private val logger: Logger = LoggerFactory.getLogger(classOf[CentralizedSparkListener])
   logger.info("Initializing CentralizedSparkListener")
@@ -28,6 +28,16 @@ class CentralizedSparkListener(sparkConf: SparkConf, sparkContext: SparkContext)
   private var appId: String = _
   private val currentJobId = new AtomicInteger(0)
   private val currentScaleOut = new AtomicInteger(0)
+  private var sparkContext: SparkContext = _
+
+  def this(sparkConf: SparkConf, sparkContext: SparkContext) = {
+    this(sparkConf)
+    this.sparkContext = sparkContext
+  }
+
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
+    this.sparkContext = SparkContext.getOrCreate(this.sparkConf);
+  }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     if (!this.active) {
@@ -54,7 +64,7 @@ class CentralizedSparkListener(sparkConf: SparkConf, sparkContext: SparkContext)
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
       logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
-      val requestResult = sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
+      val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
       logger.info("Request acknowledged? => " + requestResult.toString)
     }
   }
@@ -64,7 +74,7 @@ class CentralizedSparkListener(sparkConf: SparkConf, sparkContext: SparkContext)
       return
     }
     sendMessage(applicationEnd.time, EventType.APPLICATION_END)
-    zeroMQClient.close()
+    this.zeroMQClient.close()
   }
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
@@ -94,8 +104,8 @@ class CentralizedSparkListener(sparkConf: SparkConf, sparkContext: SparkContext)
   }
 
   private def getInitialScaleOutCount(executorHost: String): Int = {
-    val allExecutors = sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
-    val driverHost: String = sparkContext.getConf.get("spark.driver.host")
+    val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
+    val driverHost: String = this.sparkContext.getConf.get("spark.driver.host")
     allExecutors
       .filter(!_.split(":")(0).equals(driverHost))
       .filter(!_.split(":")(0).equals(executorHost.split(":")(0)))
@@ -124,6 +134,6 @@ class CentralizedSparkListener(sparkConf: SparkConf, sparkContext: SparkContext)
       num_executors = this.currentScaleOut.get(),
       event_type = eventType
     )
-    zeroMQClient.sendMessage(message)
+    this.zeroMQClient.sendMessage(message)
   }
 }
