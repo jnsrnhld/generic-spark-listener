@@ -1,6 +1,6 @@
 package de.tu_berlin.jarnhold.listener
 
 case class ResponseMessage(
-                            app_id: String,
+                            app_event_id: String,
                             recommended_scale_out: Int
                           )

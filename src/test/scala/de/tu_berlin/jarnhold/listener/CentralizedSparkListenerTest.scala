@@ -35,7 +35,7 @@ class CentralizedSparkListenerTest extends AnyFunSuite with Matchers with Mockit
     // Start ZeroMQTestServer
     val server = new ZeroMQTestServer(port)
     val responseMessage = ResponseMessage(
-      app_id = "test-app",
+      app_event_id = "test-app",
       recommended_scale_out = 5
     )
     val responseJson = Serialization.write(responseMessage)

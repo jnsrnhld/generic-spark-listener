@@ -1,7 +1,7 @@
 package de.tu_berlin.jarnhold.listener
 
 case class RequestMessage(
-                           app_id: String,
+                           app_event_id: String,
                            app_name: String,
                            app_time: Long,
                            job_id: Int,

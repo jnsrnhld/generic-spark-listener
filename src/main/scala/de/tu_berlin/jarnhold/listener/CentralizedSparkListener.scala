@@ -46,7 +46,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
 
     val response = sendMessage(jobStart.time, EventType.JOB_START)
-    this.appId = response.app_id
+    this.appId = response.app_event_id
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
@@ -124,7 +124,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def sendMessage(appTime: Long, eventType: EventType): ResponseMessage = {
     val message = RequestMessage(
-      app_id = this.appId,
+      app_event_id = this.appId,
       app_name = this.appSignature,
       app_time = appTime,
       job_id = this.currentJobId.get(),

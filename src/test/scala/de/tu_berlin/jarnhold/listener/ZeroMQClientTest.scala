@@ -18,7 +18,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     // Start ZeroMQTestServer
     val server = new ZeroMQTestServer(port)
     val responseMessage = ResponseMessage(
-      app_id = "test-app",
+      app_event_id = "test-app",
       recommended_scale_out = 5
     )
     val responseJson = Serialization.write(responseMessage)
@@ -28,7 +28,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
 
     val client = new ZeroMQClient(bridgeServiceAddress)
     val requestMessage = RequestMessage(
-      app_id = "test-app",
+      app_event_id = "test-app",
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
       job_id = 1,
