@@ -42,9 +42,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.currentJobId.set(jobId)
     if (isInitialJobOfSparkApplication(jobId)) {
       ensureSparkContextIsSet()
-      handleScaleOutMonitoring(None)
-    } else {
-      handleScaleOutMonitoring(Option(getDriverHost))
+      setInitialScaleOut()
     }
 
     val response = sendMessage(jobStart.time, EventType.JOB_START)
@@ -59,7 +57,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val jobDuration = jobEnd.time
     val response = sendMessage(jobDuration, EventType.JOB_END)
 
-    handleScaleOutMonitoring(Option(getDriverHost))
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
       logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
@@ -76,32 +73,40 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.zeroMQClient.close()
   }
 
-  private def handleScaleOutMonitoring(executorHost: Option[String]): Unit = {
+  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+    handleScaleOutMonitoring(executorAdded.executorInfo.executorHost)
+  }
+
+  override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
+    handleScaleOutMonitoring("NO_HOST")
+  }
+
+  private def handleScaleOutMonitoring(executorHost: String): Unit = {
     synchronized {
-      if (!this.active) {
+      // the executors might be added before actual application start => there won't be a SparkContext yet in this case,
+      // thus also no current scale out to monitor yet
+      if (!this.active || this.sparkContext == null) {
         return
       }
-      // No scale-out yet? Get the number of currently running executors
-      if (this.currentScaleOut.get() == 0) {
-        this.currentScaleOut.set(getInitialScaleOutCount(executorHost.getOrElse("NO_HOST")))
-      }
       // An executor was removed? Else, an executor was added
-      if (executorHost.isDefined && executorHost.get == "NO_HOST") {
+      if (executorHost == "NO_HOST") {
         this.currentScaleOut.decrementAndGet()
-      } else if (executorHost.isDefined) {
+      } else {
         this.currentScaleOut.incrementAndGet()
       }
     }
   }
 
-  private def getInitialScaleOutCount(executorHost: String): Int = {
-    val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
-    val driverHost: String = getDriverHost
-    allExecutors
-      .filter(!_.split(":")(0).equals(driverHost))
-      .filter(!_.split(":")(0).equals(executorHost.split(":")(0)))
-      .toList
-      .length
+  private def setInitialScaleOut(): Unit = {
+    synchronized {
+      val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
+      val driverHost: String = getDriverHost
+      val scaleOut = allExecutors
+        .filter(!_.split(":")(0).equals(driverHost))
+        .toList
+        .length
+      this.currentScaleOut.set(scaleOut)
+    }
   }
 
   private def checkConfigurations(): Unit = {
