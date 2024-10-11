@@ -40,9 +40,11 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
     val jobId = jobStart.jobId
     this.currentJobId.set(jobId)
-    if (jobId == 0) {
+    if (isInitialJobOfSparkApplication(jobId)) {
       ensureSparkContextIsSet()
       handleScaleOutMonitoring(None)
+    } else {
+      handleScaleOutMonitoring(Option(getDriverHost))
     }
 
     val response = sendMessage(jobStart.time, EventType.JOB_START)
@@ -143,5 +145,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
    */
   private def getDriverHost = {
     this.sparkContext.getConf.get("spark.driver.host")
+  }
+
+  private def isInitialJobOfSparkApplication(jobId: Int) = {
+    jobId == 0
   }
 }
