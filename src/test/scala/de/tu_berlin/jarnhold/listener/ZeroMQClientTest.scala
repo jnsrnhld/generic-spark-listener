@@ -44,6 +44,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     val appRequestMessage = AppRequestMessage(
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
+      target_runtime = 30000,
       initial_executors = 5,
       min_executors = 2,
       max_executors =  10,

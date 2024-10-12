@@ -25,6 +25,7 @@ class CentralizedSparkListenerTest extends AnyFunSuite with MockitoSugar with Sc
     sparkConf.set("spark.app.name", "Test Application")
     sparkConf.set("spark.customExtraListener.bridgeServiceAddress", bridgeServiceAddress)
     sparkConf.set("spark.customExtraListener.isAdaptive", "true")
+    sparkConf.set("spark.customExtraListener.targetRuntime", "30000")
     sparkConf.set("spark.customExtraListener.initialExecutors", "5")
     sparkConf.set("spark.customExtraListener.minExecutors", "2")
     sparkConf.set("spark.customExtraListener.maxExecutors", "10")

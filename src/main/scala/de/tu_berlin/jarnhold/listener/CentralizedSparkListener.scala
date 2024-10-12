@@ -15,6 +15,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   // Listener configuration
   private val isAdaptive: Boolean = sparkConf.getBoolean("spark.customExtraListener.isAdaptive", defaultValue = true)
   private val bridgeServiceAddress: String = sparkConf.get("spark.customExtraListener.bridgeServiceAddress")
+  private val targetRuntime: Int = sparkConf.get("spark.customExtraListener.targetRuntime").toInt
   private val initialExecutors: Int = sparkConf.get("spark.customExtraListener.initialExecutors").toInt
   private val minExecutors: Int = sparkConf.get("spark.customExtraListener.minExecutors").toInt
   private val maxExecutors: Int = sparkConf.get("spark.customExtraListener.maxExecutors").toInt
@@ -118,6 +119,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val parametersList = List(
       "spark.customExtraListener.isAdaptive",
       "spark.customExtraListener.bridgeServiceAddress",
+      "spark.customExtraListener.targetRuntime",
       "spark.customExtraListener.initialExecutors",
       "spark.customExtraListener.minExecutors",
       "spark.customExtraListener.maxExecutors",
@@ -146,6 +148,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val message = AppRequestMessage(
       app_name = this.appSignature,
       app_time = appTime,
+      target_runtime = this.targetRuntime,
       initial_executors =  this.initialExecutors,
       min_executors =  this.minExecutors,
       max_executors = this.maxExecutors,

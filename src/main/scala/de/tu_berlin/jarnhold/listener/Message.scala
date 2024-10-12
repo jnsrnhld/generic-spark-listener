@@ -8,6 +8,7 @@ case class MessageEnvelope[T](event_type: EventType, payload: T) extends Message
 case class AppRequestMessage(
                               app_name: String,
                               app_time: Long,
+                              target_runtime: Int,
                               initial_executors: Int,
                               min_executors: Int,
                               max_executors: Int
