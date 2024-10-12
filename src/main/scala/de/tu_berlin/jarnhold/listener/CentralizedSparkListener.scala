@@ -15,6 +15,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   // Listener configuration
   private val isAdaptive: Boolean = sparkConf.getBoolean("spark.customExtraListener.isAdaptive", defaultValue = true)
   private val bridgeServiceAddress: String = sparkConf.get("spark.customExtraListener.bridgeServiceAddress")
+  private val initialExecutors: Int = sparkConf.get("spark.customExtraListener.initialExecutors").toInt
+  private val minExecutors: Int = sparkConf.get("spark.customExtraListener.minExecutors").toInt
+  private val maxExecutors: Int = sparkConf.get("spark.customExtraListener.maxExecutors").toInt
   private val active: Boolean = this.isAdaptive
 
   // Setup communication
@@ -32,6 +35,10 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.sparkContext = sparkContext
   }
 
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
+    sendAppRequestMessage(applicationStart.time, EventType.APPLICATION_START)
+  }
+
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     if (!this.active) {
       return
@@ -43,7 +50,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       setInitialScaleOut()
     }
 
-    val response = sendMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
+    val response = sendJobRequestMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
     this.appId = response.app_event_id
   }
 
@@ -53,7 +60,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
 
     val jobDuration = jobEnd.time
-    val response = sendMessage(jobEnd.jobId, jobDuration, EventType.JOB_END)
+    val response = sendJobRequestMessage(jobEnd.jobId, jobDuration, EventType.JOB_END)
 
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
@@ -67,7 +74,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     if (!this.active) {
       return
     }
-    sendMessage(-1, applicationEnd.time, EventType.APPLICATION_END)
+    sendAppRequestMessage(applicationEnd.time, EventType.APPLICATION_END)
     this.zeroMQClient.close()
   }
 
@@ -110,7 +117,10 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private def checkConfigurations(): Unit = {
     val parametersList = List(
       "spark.customExtraListener.isAdaptive",
-      "spark.customExtraListener.bridgeServiceAddress"
+      "spark.customExtraListener.bridgeServiceAddress",
+      "spark.customExtraListener.initialExecutors",
+      "spark.customExtraListener.minExecutors",
+      "spark.customExtraListener.maxExecutors",
     )
     logger.info("Current spark conf" + sparkConf.toDebugString)
     for (param <- parametersList) {
@@ -120,16 +130,27 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
   }
 
-  private def sendMessage(jobId: Int, appTime: Long, eventType: EventType): ResponseMessage = {
-    val message = RequestMessage(
+  private def sendJobRequestMessage(jobId: Int, appTime: Long, eventType: EventType): ResponseMessage = {
+    val message = JobRequestMessage(
       app_event_id = this.appId,
       app_name = this.appSignature,
       app_time = appTime,
       job_id = jobId,
       num_executors = this.currentScaleOut.get(),
-      event_type = eventType
     )
-    this.zeroMQClient.sendMessage(message)
+    this.zeroMQClient.sendMessage(eventType, message)
+  }
+
+
+  private def sendAppRequestMessage(appTime: Long, eventType: EventType): ResponseMessage = {
+    val message = AppRequestMessage(
+      app_name = this.appSignature,
+      app_time = appTime,
+      initial_executors =  this.initialExecutors,
+      min_executors =  this.minExecutors,
+      max_executors = this.maxExecutors,
+    )
+    this.zeroMQClient.sendMessage(eventType, message)
   }
 
   /**

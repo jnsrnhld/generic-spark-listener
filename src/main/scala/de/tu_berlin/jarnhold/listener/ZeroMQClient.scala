@@ -1,5 +1,6 @@
 package de.tu_berlin.jarnhold.listener
 
+import de.tu_berlin.jarnhold.listener.EventType.EventType
 import de.tu_berlin.jarnhold.listener.JsonFormats.formats
 import org.json4s.MappingException
 import org.json4s.native.{JsonMethods, Serialization}
@@ -14,9 +15,10 @@ class ZeroMQClient(bridgeServiceAddress: String) {
   private val poller = context.createPoller(1)
   poller.register(socket, ZMQ.Poller.POLLIN)
 
-  def sendMessage(message: RequestMessage): ResponseMessage = {
+  def sendMessage(eventType: EventType, message: Message): ResponseMessage = {
     try {
-      val jsonString = Serialization.write(message)
+      val envelope = MessageEnvelope(eventType, message)
+      val jsonString = Serialization.write(envelope)
       socket.send(jsonString.getBytes(ZMQ.CHARSET), 0)
 
       while (!Thread.currentThread().isInterrupted) {
