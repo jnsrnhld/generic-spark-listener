@@ -24,7 +24,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   // Application parameters
   private val appSignature: String = sparkConf.get("spark.app.name")
   private var appId: String = _
-  private val currentJobId = new AtomicInteger(0)
   private val currentScaleOut = new AtomicInteger(0)
   private var sparkContext: SparkContext = _
 
@@ -39,13 +38,12 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
 
     val jobId = jobStart.jobId
-    this.currentJobId.set(jobId)
     if (isInitialJobOfSparkApplication(jobId)) {
       ensureSparkContextIsSet()
       setInitialScaleOut()
     }
 
-    val response = sendMessage(jobStart.time, EventType.JOB_START)
+    val response = sendMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
     this.appId = response.app_event_id
   }
 
@@ -55,7 +53,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
 
     val jobDuration = jobEnd.time
-    val response = sendMessage(jobDuration, EventType.JOB_END)
+    val response = sendMessage(jobEnd.jobId, jobDuration, EventType.JOB_END)
 
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
@@ -69,7 +67,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     if (!this.active) {
       return
     }
-    sendMessage(applicationEnd.time, EventType.APPLICATION_END)
+    sendMessage(-1, applicationEnd.time, EventType.APPLICATION_END)
     this.zeroMQClient.close()
   }
 
@@ -122,12 +120,12 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
   }
 
-  private def sendMessage(appTime: Long, eventType: EventType): ResponseMessage = {
+  private def sendMessage(jobId: Int, appTime: Long, eventType: EventType): ResponseMessage = {
     val message = RequestMessage(
       app_event_id = this.appId,
       app_name = this.appSignature,
       app_time = appTime,
-      job_id = this.currentJobId.get(),
+      job_id = jobId,
       num_executors = this.currentScaleOut.get(),
       event_type = eventType
     )
