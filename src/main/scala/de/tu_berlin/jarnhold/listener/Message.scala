@@ -5,7 +5,7 @@ import de.tu_berlin.jarnhold.listener.EventType.EventType
 sealed trait Message
 case class MessageEnvelope[T](event_type: EventType, payload: T) extends Message
 
-case class AppRequestMessage(
+case class AppStartMessage(
                               app_name: String,
                               app_time: Long,
                               target_runtime: Int,
@@ -14,7 +14,14 @@ case class AppRequestMessage(
                               max_executors: Int
                             ) extends Message
 
-case class JobRequestMessage(
+case class AppEndMessage(
+                              app_event_id: String,
+                              app_name: String,
+                              app_time: Long,
+                              num_executors: Int,
+                            ) extends Message
+
+case class JobEventMessage(
                            app_event_id: String,
                            app_name: String,
                            app_time: Long,

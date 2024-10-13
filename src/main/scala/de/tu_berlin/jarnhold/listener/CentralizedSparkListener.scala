@@ -37,7 +37,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    sendAppRequestMessage(applicationStart.time, EventType.APPLICATION_START)
+    sendAppStartMessage(applicationStart.time, EventType.APPLICATION_START)
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -51,7 +51,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       setInitialScaleOut()
     }
 
-    val response = sendJobRequestMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
+    val response = sendJobEventMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
     this.appId = response.app_event_id
   }
 
@@ -61,7 +61,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
 
     val jobDuration = jobEnd.time
-    val response = sendJobRequestMessage(jobEnd.jobId, jobDuration, EventType.JOB_END)
+    val response = sendJobEventMessage(jobEnd.jobId, jobDuration, EventType.JOB_END)
 
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
@@ -75,7 +75,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     if (!this.active) {
       return
     }
-    sendAppRequestMessage(applicationEnd.time, EventType.APPLICATION_END)
+    this.sendAppEndMessage(applicationEnd.time, EventType.APPLICATION_END)
     this.zeroMQClient.close()
   }
 
@@ -132,8 +132,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
   }
 
-  private def sendJobRequestMessage(jobId: Int, appTime: Long, eventType: EventType): ResponseMessage = {
-    val message = JobRequestMessage(
+  private def sendJobEventMessage(jobId: Int, appTime: Long, eventType: EventType): ResponseMessage = {
+    val message = JobEventMessage(
       app_event_id = this.appId,
       app_name = this.appSignature,
       app_time = appTime,
@@ -144,8 +144,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
 
-  private def sendAppRequestMessage(appTime: Long, eventType: EventType): ResponseMessage = {
-    val message = AppRequestMessage(
+  private def sendAppStartMessage(appTime: Long, eventType: EventType): ResponseMessage = {
+    val message = AppStartMessage(
       app_name = this.appSignature,
       app_time = appTime,
       target_runtime = this.targetRuntime,
@@ -155,6 +155,17 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     )
     this.zeroMQClient.sendMessage(eventType, message)
   }
+
+  private def sendAppEndMessage(appTime: Long, eventType: EventType): ResponseMessage = {
+    val message = AppEndMessage(
+      app_event_id = this.appId,
+      app_name = this.appSignature,
+      app_time = appTime,
+      num_executors = this.currentScaleOut.get()
+    )
+    this.zeroMQClient.sendMessage(eventType, message)
+  }
+
 
   /**
    * Only call after ApplicationStart: Otherwise a second SparkContext will be created which will eventually crash

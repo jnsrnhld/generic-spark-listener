@@ -21,8 +21,8 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     // Give the server time to start
 
     val client = new ZeroMQClient(bridgeServiceAddress)
-    val requestMessage = JobRequestMessage(
-      app_event_id = "test-app",
+    val requestMessage = JobEventMessage(
+      app_event_id = "12552352522",
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
       job_id = 1,
@@ -41,7 +41,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     val (bridgeServiceAddress: String, server: ZeroMQTestServer, serverFuture: Future[Unit]) = startZMQServer
 
     val client = new ZeroMQClient(bridgeServiceAddress)
-    val appRequestMessage = AppRequestMessage(
+    val appStartMessage = AppStartMessage(
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
       target_runtime = 30000,
@@ -49,9 +49,17 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
       min_executors = 2,
       max_executors =  10,
     )
+    val appEndMessage = AppEndMessage(
+      app_event_id = "12552352522",
+      app_name = "Test Application",
+      app_time = System.currentTimeMillis(),
+      num_executors = 5
+    )
 
-    val result = client.sendMessage(EventType.APPLICATION_START, appRequestMessage)
-    result shouldEqual responseMessage
+    val result1 = client.sendMessage(EventType.APPLICATION_START, appStartMessage)
+    val result2 = client.sendMessage(EventType.APPLICATION_END, appEndMessage)
+    result1 shouldEqual responseMessage
+    result2 shouldEqual responseMessage
 
     client.close()
     server.stop()
