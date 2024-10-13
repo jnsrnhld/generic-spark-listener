@@ -37,7 +37,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    sendAppStartMessage(applicationStart.time, EventType.APPLICATION_START)
+    val response = sendAppStartMessage(applicationStart.time, EventType.APPLICATION_START)
+    this.appId = response.app_event_id
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -51,8 +52,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       setInitialScaleOut()
     }
 
-    val response = sendJobEventMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
-    this.appId = response.app_event_id
+    sendJobEventMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
