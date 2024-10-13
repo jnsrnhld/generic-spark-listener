@@ -37,7 +37,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    val response = sendAppStartMessage(applicationStart.time, EventType.APPLICATION_START)
+    val response = sendAppStartMessage(applicationStart.time)
     this.appId = response.app_event_id
   }
 
@@ -75,7 +75,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     if (!this.active) {
       return
     }
-    this.sendAppEndMessage(applicationEnd.time, EventType.APPLICATION_END)
+    this.sendAppEndMessage(applicationEnd.time)
     this.zeroMQClient.close()
   }
 
@@ -144,7 +144,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
 
-  private def sendAppStartMessage(appTime: Long, eventType: EventType): ResponseMessage = {
+  private def sendAppStartMessage(appTime: Long): ResponseMessage = {
     val message = AppStartMessage(
       app_name = this.appSignature,
       app_time = appTime,
@@ -153,17 +153,17 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       min_executors =  this.minExecutors,
       max_executors = this.maxExecutors,
     )
-    this.zeroMQClient.sendMessage(eventType, message)
+    this.zeroMQClient.sendMessage(EventType.APPLICATION_START, message)
   }
 
-  private def sendAppEndMessage(appTime: Long, eventType: EventType): ResponseMessage = {
+  private def sendAppEndMessage(appTime: Long): ResponseMessage = {
     val message = AppEndMessage(
       app_event_id = this.appId,
       app_name = this.appSignature,
       app_time = appTime,
       num_executors = this.currentScaleOut.get()
     )
-    this.zeroMQClient.sendMessage(eventType, message)
+    this.zeroMQClient.sendMessage(EventType.APPLICATION_END, message)
   }
 
 
