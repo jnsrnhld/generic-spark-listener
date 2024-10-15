@@ -16,8 +16,8 @@ class StageInfoMap {
 
   def addStages(jobStart: SparkListenerJobStart): Unit = {
     val jobId = jobStart.jobId
-    this.submits.put(jobId, Array.ofDim[StageSubmit](jobStart.stageIds.size))
-    this.completes.put(jobId, Array.ofDim[StageComplete](jobStart.stageIds.size))
+    this.submits.put(jobId, Array.ofDim[StageSubmit](jobStart.stageInfos.size))
+    this.completes.put(jobId, Array.ofDim[StageComplete](jobStart.stageInfos.size))
   }
 
   def addStageSubmit(jobId: Int, executorCount: Int, stageSubmitted: SparkListenerStageSubmitted): Unit = {
@@ -137,30 +137,3 @@ case class StageRddInfo(
                          memSize: Long,
                          diskSize: Long,
                        )
-
-case class StageMetrics(
-                         cpu_utilization: Double,
-                         gc_time_ratio: Double,
-                         shuffle_read_write_ratio: Double,
-                         input_output_ratio: Double,
-                         memory_spill_ratio: Double
-                       )
-
-case class Stage(
-                  stage_id: String,
-                  stage_name: String,
-                  num_tasks: Int,
-                  parent_stage_ids: String,
-                  attempt_id: Int,
-                  failure_reason: String,
-                  start_time: Long,
-                  end_time: Long,
-                  start_scale_out: Int,
-                  end_scale_out: Int,
-                  rescaling_time_ratio: Double,
-                  rdd_num_partitions: Int,
-                  rdd_num_cached_partitions: Int,
-                  rdd_mem_size: Long,
-                  rdd_disk_size: Long,
-                  metrics: StageMetrics,
-                )
