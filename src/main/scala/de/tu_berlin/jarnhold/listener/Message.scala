@@ -11,7 +11,8 @@ case class AppStartMessage(
                               target_runtime: Int,
                               initial_executors: Int,
                               min_executors: Int,
-                              max_executors: Int
+                              max_executors: Int,
+                              attempt_id: String,
                             ) extends Message
 
 case class AppEndMessage(
@@ -21,13 +22,24 @@ case class AppEndMessage(
                               num_executors: Int,
                             ) extends Message
 
-case class JobEventMessage(
+case class JobStartMessage(
                            app_event_id: String,
                            app_name: String,
                            app_time: Long,
                            job_id: Int,
                            num_executors: Int,
                          ) extends Message
+
+case class JobEndMessage(
+                            app_event_id: String,
+                            app_name: String,
+                            app_time: Long,
+                            job_id: Int,
+                            num_executors: Int,
+                            rescaling_time_ratio: Double,
+                            stages: Array[Stage]
+                          ) extends Message
+
 
 case class ResponseMessage(
                             app_event_id: String,

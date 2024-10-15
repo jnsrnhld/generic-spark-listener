@@ -1,11 +1,13 @@
 package de.tu_berlin.jarnhold.listener
 
-import de.tu_berlin.jarnhold.listener.EventType.EventType
+import de.tu_berlin.jarnhold.listener.SafeDivision.saveDivision
 import org.apache.spark.scheduler._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.mutable.ListBuffer
+import scala.util.Try
 
 class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
@@ -28,8 +30,15 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   // Application parameters
   private val appSignature: String = sparkConf.get("spark.app.name")
   private var appId: String = _
-  private val currentScaleOut = new AtomicInteger(0)
+  private var appStartTime: Long = _
   private var sparkContext: SparkContext = _
+  private val currentScaleOut = new AtomicInteger(0)
+  private val currentJobId = new AtomicInteger(0)
+
+  // scale-out, time of measurement, total time
+  private val scaleOutBuffer: ListBuffer[(Int, Long)] = ListBuffer()
+  // stage monitoring
+  private val stageInfoMap: StageInfoMap = new StageInfoMap()
 
   def this(sparkConf: SparkConf, sparkContext: SparkContext) = {
     this(sparkConf)
@@ -37,8 +46,11 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    val response = sendAppStartMessage(applicationStart.time)
+    val appAttemptId = applicationStart.appAttemptId
+    val appStartTime = applicationStart.time
+    val response = sendAppStartMessage(appStartTime, appAttemptId)
     this.appId = response.app_event_id
+    this.appStartTime = appStartTime
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -47,12 +59,36 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
 
     val jobId = jobStart.jobId
+    this.currentJobId.set(jobId)
     if (isInitialJobOfSparkApplication(jobId)) {
       ensureSparkContextIsSet()
       setInitialScaleOut()
     }
 
-    sendJobEventMessage(jobStart.jobId, jobStart.time, EventType.JOB_START)
+    this.stageInfoMap.addStages(jobStart)
+    sendJobStartMessage(jobStart.jobId, jobStart.time)
+  }
+
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+    if (!this.active) {
+      return
+    }
+    val jobId = this.currentJobId.get()
+    val scaleOut = this.currentScaleOut.get()
+    this.stageInfoMap.addStageSubmit(jobId, scaleOut, stageSubmitted)
+  }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    if (!this.active) {
+      return
+    }
+   val rescalingTimeRatio = computeRescalingTimeRatio(
+      stageCompleted.stageInfo.submissionTime.getOrElse(0L),
+      stageCompleted.stageInfo.completionTime.getOrElse(0L)
+    )
+    val jobId = this.currentJobId.get()
+    val scaleOut = this.currentScaleOut.get()
+    this.stageInfoMap.addStageComplete(jobId, scaleOut, rescalingTimeRatio, stageCompleted)
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
@@ -60,8 +96,11 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       return
     }
 
+    val jobId = jobEnd.jobId
     val jobDuration = jobEnd.time
-    val response = sendJobEventMessage(jobEnd.jobId, jobDuration, EventType.JOB_END)
+    val rescalingTimeRatio: Double = computeRescalingTimeRatio(this.appStartTime, jobEnd.time)
+    val stages = this.stageInfoMap.getStages(jobId)
+    val response = sendJobEndMessage(jobId, jobDuration, rescalingTimeRatio, stages)
 
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
@@ -80,14 +119,14 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-    handleScaleOutMonitoring(executorAdded.executorInfo.executorHost)
+    handleScaleOutMonitoring(Option(executorAdded.time), executorAdded.executorInfo.executorHost)
   }
 
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-    handleScaleOutMonitoring("NO_HOST")
+    handleScaleOutMonitoring(Option(executorRemoved.time), "NO_HOST")
   }
 
-  private def handleScaleOutMonitoring(executorHost: String): Unit = {
+  private def handleScaleOutMonitoring(executorActionTime: Option[Long], executorHost: String): Unit = {
     synchronized {
       // the executors might be added before actual application start => there won't be a SparkContext yet in this case,
       // thus also no current scale out to monitor yet
@@ -99,6 +138,11 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
         this.currentScaleOut.decrementAndGet()
       } else {
         this.currentScaleOut.incrementAndGet()
+      }
+
+      logger.info(s"Current number of executors: ${currentScaleOut.get()}.")
+      if (executorActionTime.isDefined) {
+        scaleOutBuffer.append((currentScaleOut.get(), executorActionTime.get))
       }
     }
   }
@@ -132,26 +176,65 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
   }
 
-  private def sendJobEventMessage(jobId: Int, appTime: Long, eventType: EventType): ResponseMessage = {
-    val message = JobEventMessage(
+  private def computeRescalingTimeRatio(startTime: Long, endTime: Long): Double = {
+
+    val scaleOutList: List[(Int, Long)] = scaleOutBuffer.toList
+
+    val dividend: Long = scaleOutList
+      .sortBy(_._2)
+      .zipWithIndex.map { case (tup, idx) => (tup._1, tup._2, Try(scaleOutList(idx + 1)._2 - tup._2).getOrElse(0L)) }
+      .filter(e => e._2 + e._3 >= startTime && e._2 <= endTime)
+      .drop(1) // drop first element => is respective start scale-out
+      .dropRight(1) // drop last element => is respective end scale-out
+      .map(e => {
+        val startTimeScaleOut: Long = e._2
+        var endTimeScaleOut: Long = e._2 + e._3
+        if (e._3 == 0L)
+          endTimeScaleOut = endTime
+
+        val intervalStartTime: Long = Math.min(Math.max(startTime, startTimeScaleOut), endTime)
+        val intervalEndTime: Long = Math.max(startTime, Math.min(endTime, endTimeScaleOut))
+
+        intervalEndTime - intervalStartTime
+      })
+      .sum
+
+    saveDivision(dividend, endTime - startTime)
+  }
+
+  private def sendJobStartMessage(jobId: Int, appTime: Long): ResponseMessage = {
+    val message = JobStartMessage(
       app_event_id = this.appId,
       app_name = this.appSignature,
       app_time = appTime,
       job_id = jobId,
       num_executors = this.currentScaleOut.get(),
     )
-    this.zeroMQClient.sendMessage(eventType, message)
+    this.zeroMQClient.sendMessage(EventType.JOB_START, message)
   }
 
+  private def sendJobEndMessage(jobId: Int, appTime: Long, rescalingTimeRatio: Double, stages: Array[Stage]): ResponseMessage = {
+    val message = JobEndMessage(
+      app_event_id = this.appId,
+      app_name = this.appSignature,
+      app_time = appTime,
+      job_id = jobId,
+      num_executors = this.currentScaleOut.get(),
+      rescaling_time_ratio = rescalingTimeRatio,
+      stages = stages
+    )
+    this.zeroMQClient.sendMessage(EventType.JOB_END, message)
+  }
 
-  private def sendAppStartMessage(appTime: Long): ResponseMessage = {
+  private def sendAppStartMessage(appTime: Long, appAttemptId: Option[String]): ResponseMessage = {
     val message = AppStartMessage(
       app_name = this.appSignature,
       app_time = appTime,
       target_runtime = this.targetRuntime,
-      initial_executors =  this.initialExecutors,
-      min_executors =  this.minExecutors,
+      initial_executors = this.initialExecutors,
+      min_executors = this.minExecutors,
       max_executors = this.maxExecutors,
+      attempt_id = appAttemptId.orNull
     )
     this.zeroMQClient.sendMessage(EventType.APPLICATION_START, message)
   }

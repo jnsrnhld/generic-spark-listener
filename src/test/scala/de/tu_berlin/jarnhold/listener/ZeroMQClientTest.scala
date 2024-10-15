@@ -17,11 +17,10 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
   )
 
   test("ZeroMQClient should send and receive job messages messages correctly") {
-    val (bridgeServiceAddress: String, server: ZeroMQTestServer, serverFuture: Future[Unit]) = startZMQServer // Use a test port
-    // Give the server time to start
+    val (bridgeServiceAddress: String, server: ZeroMQTestServer, serverFuture: Future[Unit]) = startZMQServer
 
     val client = new ZeroMQClient(bridgeServiceAddress)
-    val requestMessage = JobEventMessage(
+    val jobStartMessage = JobStartMessage(
       app_event_id = "12552352522",
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
@@ -29,8 +28,47 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
       num_executors = 3,
     )
 
-    val result = client.sendMessage(EventType.JOB_START, requestMessage)
-    result shouldEqual responseMessage
+    val stageMetrics = StageMetrics(
+      cpuUtilization = 0.75,
+      gcTimeRatio = 0.05,
+      shuffleReadWriteRatio = 0.3,
+      inputOutputRatio = 0.4,
+      memorySpillRatio = 0.1
+    )
+
+    val stage = Stage(
+      stage_id = "1",
+      stage_name = "example_stage",
+      num_tasks = 100,
+      parent_stage_ids = "1",
+      attempt_id = 1,
+      failure_reason = "",
+      start_time = System.currentTimeMillis() - 5000L,
+      end_time = System.currentTimeMillis(),
+      start_scale_out = 10,
+      end_scale_out = 20,
+      rescaling_time_ratio = 1.5,
+      rdd_num_partitions = 50,
+      rdd_num_cached_partitions = 40,
+      rdd_mem_size = 1024 * 1024 * 1024L,
+      rdd_disk_size = 2048 * 1024 * 1024L,
+      metrics = stageMetrics
+    )
+
+    val jobEndMessage = JobEndMessage(
+      app_event_id = "app_event_123",
+      app_name = "ExampleApp",
+      app_time = System.currentTimeMillis(),
+      job_id = 42,
+      num_executors = 5,
+      rescaling_time_ratio = 1.2,
+      stages = Array(stage)
+    )
+
+    val result1 = client.sendMessage(EventType.JOB_START, jobStartMessage)
+    val result2 = client.sendMessage(EventType.JOB_END, jobEndMessage)
+    result1 shouldEqual responseMessage
+    result2 shouldEqual responseMessage
 
     client.close()
     server.stop()
@@ -48,6 +86,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
       initial_executors = 5,
       min_executors = 2,
       max_executors =  10,
+      attempt_id = "1"
     )
     val appEndMessage = AppEndMessage(
       app_event_id = "12552352522",
