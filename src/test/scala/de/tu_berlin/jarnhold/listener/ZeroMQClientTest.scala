@@ -29,11 +29,11 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     )
 
     val stageMetrics = StageMetrics(
-      cpuUtilization = 0.75,
-      gcTimeRatio = 0.05,
-      shuffleReadWriteRatio = 0.3,
-      inputOutputRatio = 0.4,
-      memorySpillRatio = 0.1
+      cpu_utilization = 0.75,
+      gc_time_ratio = 0.05,
+      shuffle_read_write_ratio = 0.3,
+      input_output_ratio = 0.4,
+      memory_spill_ratio = 0.1
     )
 
     val stage = Stage(
