@@ -2,35 +2,29 @@ package de.tu_berlin.jarnhold.listener
 
 import de.tu_berlin.jarnhold.listener.SafeDivision.saveDivision
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.scheduler.{SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.spark.storage.RDDInfo
 
 import java.util.concurrent.ConcurrentHashMap
+import scala.collection.mutable
 
 class StageInfoMap {
 
-  private val submits: ConcurrentHashMap[Int, Array[StageSubmit]] =
-    new ConcurrentHashMap[Int, Array[StageSubmit]]()
-  private val completes: ConcurrentHashMap[Int, Array[StageComplete]] =
-    new ConcurrentHashMap[Int, Array[StageComplete]]()
-
-  def addStages(jobStart: SparkListenerJobStart): Unit = {
-    val jobId = jobStart.jobId
-    this.submits.put(jobId, Array.ofDim[StageSubmit](jobStart.stageInfos.size))
-    this.completes.put(jobId, Array.ofDim[StageComplete](jobStart.stageInfos.size))
-  }
+  private val submits: ConcurrentHashMap[Int, mutable.ArrayBuffer[StageSubmit]] =
+    new ConcurrentHashMap[Int, mutable.ArrayBuffer[StageSubmit]]()
+  private val completes: ConcurrentHashMap[Int, mutable.ArrayBuffer[StageComplete]] =
+    new ConcurrentHashMap[Int, mutable.ArrayBuffer[StageComplete]]()
 
   def addStageSubmit(jobId: Int, executorCount: Int, stageSubmitted: SparkListenerStageSubmitted): Unit = {
     val stageInfo = stageSubmitted.stageInfo
-    // stage-ids are incremental integers, but 1-index based
-    this.submits.get(jobId){stageInfo.stageId - 1} = StageSubmit(
+    this.submits.computeIfAbsent(jobId, _ => mutable.ArrayBuffer[StageSubmit]()).append(StageSubmit(
       stageInfo.stageId,
       stageInfo.name,
       stageInfo.submissionTime.get,
       executorCount,
       stageInfo.parentIds.toArray,
       stageInfo.numTasks,
-    )
+    ))
   }
 
   def addStageComplete(
@@ -40,8 +34,7 @@ class StageInfoMap {
                         stageCompleted: SparkListenerStageCompleted
                       ): Unit = {
     val stageInfo = stageCompleted.stageInfo
-    // stage-ids are incremental integers, but 1-index based
-    this.completes.get(jobId){stageInfo.stageId - 1} = StageComplete(
+    this.completes.computeIfAbsent(jobId, _ => mutable.ArrayBuffer[StageComplete]()).append(StageComplete(
       stageInfo.stageId,
       stageInfo.name,
       stageInfo.completionTime.get,
@@ -51,15 +44,15 @@ class StageInfoMap {
       stageInfo.failureReason.getOrElse(""),
       extractFromRDD(stageInfo.rddInfos),
       extractFromTaskMetrics(stageInfo.taskMetrics)
-    )
+    ))
   }
 
   def getStages(jobId: Int): Array[Stage] = {
     if (this.submits.size() != this.completes.size()) {
       throw new IllegalStateException("Amount of submits and completes not equal. Cannot construct stages.")
     }
-    val submits = this.submits.get(jobId)
-    val completes = this.completes.get(jobId)
+    val submits = this.submits.get(jobId).sortBy(_.id)
+    val completes = this.completes.get(jobId).sortBy(_.id)
     submits.zipWithIndex.map { case (stageSubmit: StageSubmit, index) =>
       val stageComplete = completes{index}
       Stage(
@@ -80,7 +73,7 @@ class StageInfoMap {
         rdd_disk_size = stageComplete.rddInfo.diskSize,
         metrics = stageComplete.stageMetrics
       )
-    }
+    }.toArray
   }
 
   private def extractFromRDD(seq: Seq[RDDInfo]): StageRddInfo = {

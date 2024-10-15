@@ -65,7 +65,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       setInitialScaleOut()
     }
 
-    this.stageInfoMap.addStages(jobStart)
     sendJobStartMessage(jobStart.jobId, jobStart.time)
   }
 
