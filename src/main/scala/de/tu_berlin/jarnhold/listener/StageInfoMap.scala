@@ -2,7 +2,7 @@ package de.tu_berlin.jarnhold.listener
 
 import de.tu_berlin.jarnhold.listener.SafeDivision.saveDivision
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted, StageInfo}
 import org.apache.spark.storage.RDDInfo
 
 import java.util.concurrent.ConcurrentHashMap
@@ -10,13 +10,21 @@ import scala.collection.mutable
 
 class StageInfoMap {
 
+  private val stageToJobMap = mutable.Map[Int, Int]()
   private val submits: ConcurrentHashMap[Int, mutable.ArrayBuffer[StageSubmit]] =
     new ConcurrentHashMap[Int, mutable.ArrayBuffer[StageSubmit]]()
   private val completes: ConcurrentHashMap[Int, mutable.ArrayBuffer[StageComplete]] =
     new ConcurrentHashMap[Int, mutable.ArrayBuffer[StageComplete]]()
 
-  def addStageSubmit(jobId: Int, executorCount: Int, stageSubmitted: SparkListenerStageSubmitted): Unit = {
+  def addJob(jobStart: SparkListenerJobStart): Unit = {
+    jobStart.stageInfos.foreach { stageInfo =>
+      this.stageToJobMap.put(stageInfo.stageId, jobStart.jobId)
+    }
+  }
+
+  def addStageSubmit(executorCount: Int, stageSubmitted: SparkListenerStageSubmitted): Unit = {
     val stageInfo = stageSubmitted.stageInfo
+    val jobId = getJobOfStage(stageInfo)
     this.submits.computeIfAbsent(jobId, _ => mutable.ArrayBuffer[StageSubmit]()).append(StageSubmit(
       stageInfo.stageId,
       stageInfo.name,
@@ -28,12 +36,12 @@ class StageInfoMap {
   }
 
   def addStageComplete(
-                        jobId: Int,
                         executorCount: Int,
                         rescalingTimeRatio: Double,
                         stageCompleted: SparkListenerStageCompleted
                       ): Unit = {
     val stageInfo = stageCompleted.stageInfo
+    val jobId = getJobOfStage(stageInfo)
     this.completes.computeIfAbsent(jobId, _ => mutable.ArrayBuffer[StageComplete]()).append(StageComplete(
       stageInfo.stageId,
       stageInfo.name,
@@ -48,13 +56,13 @@ class StageInfoMap {
   }
 
   def getStages(jobId: Int): Array[Stage] = {
-    if (this.submits.size() != this.completes.size()) {
-      throw new IllegalStateException("Amount of submits and completes not equal. Cannot construct stages.")
-    }
     val submits = this.submits.get(jobId).sortBy(_.id)
     val completes = this.completes.get(jobId).sortBy(_.id)
+    if (submits.length != completes.length) {
+      throw new IllegalStateException(f"Amount of submits and completes not equal for jobId $jobId.")
+    }
     submits.zipWithIndex.map { case (stageSubmit: StageSubmit, index) =>
-      val stageComplete = completes{index}
+      val stageComplete = completes(index)
       Stage(
         stage_id = f"${stageSubmit.id}",
         stage_name = stageSubmit.name,
@@ -99,6 +107,12 @@ class StageInfoMap {
     val inputOutputRatio: Double = saveDivision(taskMetrics.inputMetrics.bytesRead, taskMetrics.outputMetrics.bytesWritten)
     val memorySpillRatio: Double = saveDivision(taskMetrics.diskBytesSpilled, taskMetrics.peakExecutionMemory)
     StageMetrics(cpuUtilization, gcTimeRatio, shuffleReadWriteRatio, inputOutputRatio, memorySpillRatio)
+  }
+
+  private def getJobOfStage(stageInfo: StageInfo) = {
+    this.stageToJobMap.getOrElse(stageInfo.stageId,
+      throw new IllegalStateException(f"No job for found for given stage ${stageInfo.stageId}")
+    )
   }
 
 }

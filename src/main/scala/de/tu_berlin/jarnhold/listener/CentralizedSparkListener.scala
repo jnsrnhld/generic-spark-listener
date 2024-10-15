@@ -33,7 +33,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private var appStartTime: Long = _
   private var sparkContext: SparkContext = _
   private val currentScaleOut = new AtomicInteger(0)
-  private val currentJobId = new AtomicInteger(0)
 
   // scale-out, time of measurement, total time
   private val scaleOutBuffer: ListBuffer[(Int, Long)] = ListBuffer()
@@ -59,12 +58,12 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
 
     val jobId = jobStart.jobId
-    this.currentJobId.set(jobId)
     if (isInitialJobOfSparkApplication(jobId)) {
       ensureSparkContextIsSet()
       setInitialScaleOut()
     }
 
+    this.stageInfoMap.addJob(jobStart)
     sendJobStartMessage(jobStart.jobId, jobStart.time)
   }
 
@@ -72,9 +71,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     if (!this.active) {
       return
     }
-    val jobId = this.currentJobId.get()
     val scaleOut = this.currentScaleOut.get()
-    this.stageInfoMap.addStageSubmit(jobId, scaleOut, stageSubmitted)
+    this.stageInfoMap.addStageSubmit(scaleOut, stageSubmitted)
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
@@ -85,9 +83,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       stageCompleted.stageInfo.submissionTime.getOrElse(0L),
       stageCompleted.stageInfo.completionTime.getOrElse(0L)
     )
-    val jobId = this.currentJobId.get()
     val scaleOut = this.currentScaleOut.get()
-    this.stageInfoMap.addStageComplete(jobId, scaleOut, rescalingTimeRatio, stageCompleted)
+    this.stageInfoMap.addStageComplete(scaleOut, rescalingTimeRatio, stageCompleted)
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
