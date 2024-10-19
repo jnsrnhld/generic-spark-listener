@@ -6,6 +6,7 @@ sealed trait Message
 case class MessageEnvelope[T](event_type: EventType, payload: T) extends Message
 
 case class AppStartMessage(
+                              application_id: String,
                               app_name: String,
                               app_time: Long,
                               target_runtime: Int,
@@ -37,7 +38,7 @@ case class JobEndMessage(
                             job_id: Int,
                             num_executors: Int,
                             rescaling_time_ratio: Double,
-                            stages: Array[Stage]
+                            stages: Map[String, Stage]
                           ) extends Message
 
 

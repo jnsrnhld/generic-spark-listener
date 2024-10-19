@@ -55,7 +55,7 @@ class StageInfoMap {
     ))
   }
 
-  def getStages(jobId: Int): Array[Stage] = {
+  def getStages(jobId: Int): Map[String, Stage] = {
     val submits = this.submits.get(jobId).sortBy(_.id)
     val completes = this.completes.get(jobId).sortBy(_.id)
     if (submits.length != completes.length) {
@@ -81,7 +81,7 @@ class StageInfoMap {
         rdd_disk_size = stageComplete.rddInfo.diskSize,
         metrics = stageComplete.stageMetrics
       )
-    }.toArray
+    }.map(stage => stage.stage_id -> stage).toMap
   }
 
   private def extractFromRDD(seq: Seq[RDDInfo]): StageRddInfo = {

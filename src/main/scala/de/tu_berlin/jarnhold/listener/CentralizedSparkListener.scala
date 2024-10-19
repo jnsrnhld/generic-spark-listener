@@ -28,8 +28,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private val zeroMQClient = new ZeroMQClient(bridgeServiceAddress)
 
   // Application parameters
+  private val applicationId: String = sparkConf.getAppId
   private val appSignature: String = sparkConf.get("spark.app.name")
-  private var appId: String = _
+  private var appEventId: String = _
   private var appStartTime: Long = _
   private var sparkContext: SparkContext = _
   private val currentScaleOut = new AtomicInteger(0)
@@ -48,7 +49,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val appAttemptId = applicationStart.appAttemptId
     val appStartTime = applicationStart.time
     val response = sendAppStartMessage(appStartTime, appAttemptId)
-    this.appId = response.app_event_id
+    this.appEventId = response.app_event_id
     this.appStartTime = appStartTime
   }
 
@@ -200,7 +201,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def sendJobStartMessage(jobId: Int, appTime: Long): ResponseMessage = {
     val message = JobStartMessage(
-      app_event_id = this.appId,
+      app_event_id = this.appEventId,
       app_name = this.appSignature,
       app_time = appTime,
       job_id = jobId,
@@ -209,9 +210,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.zeroMQClient.sendMessage(EventType.JOB_START, message)
   }
 
-  private def sendJobEndMessage(jobId: Int, appTime: Long, rescalingTimeRatio: Double, stages: Array[Stage]): ResponseMessage = {
+  private def sendJobEndMessage(jobId: Int, appTime: Long, rescalingTimeRatio: Double, stages: Map[String, Stage]): ResponseMessage = {
     val message = JobEndMessage(
-      app_event_id = this.appId,
+      app_event_id = this.appEventId,
       app_name = this.appSignature,
       app_time = appTime,
       job_id = jobId,
@@ -224,6 +225,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def sendAppStartMessage(appTime: Long, appAttemptId: Option[String]): ResponseMessage = {
     val message = AppStartMessage(
+      application_id = this.applicationId,
       app_name = this.appSignature,
       app_time = appTime,
       target_runtime = this.targetRuntime,
@@ -237,7 +239,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def sendAppEndMessage(appTime: Long): ResponseMessage = {
     val message = AppEndMessage(
-      app_event_id = this.appId,
+      app_event_id = this.appEventId,
       app_name = this.appSignature,
       app_time = appTime,
       num_executors = this.currentScaleOut.get()

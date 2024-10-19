@@ -62,7 +62,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
       job_id = 42,
       num_executors = 5,
       rescaling_time_ratio = 1.2,
-      stages = Array(stage)
+      stages = Map("1" -> stage)
     )
 
     val result1 = client.sendMessage(EventType.JOB_START, jobStartMessage)
@@ -80,6 +80,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
 
     val client = new ZeroMQClient(bridgeServiceAddress)
     val appStartMessage = AppStartMessage(
+      application_id = "app-1235142",
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
       target_runtime = 30000,
