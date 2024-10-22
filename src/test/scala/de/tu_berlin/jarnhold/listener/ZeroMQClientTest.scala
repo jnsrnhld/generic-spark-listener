@@ -12,6 +12,7 @@ import scala.concurrent.{Await, Future}
 class ZeroMQClientTest extends AnyFunSuite with Matchers {
 
   val responseMessage: ResponseMessage = ResponseMessage(
+    application_id = "app-1235142",
     app_event_id = "test-app",
     recommended_scale_out = 5
   )
@@ -21,8 +22,8 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
 
     val client = new ZeroMQClient(bridgeServiceAddress)
     val jobStartMessage = JobStartMessage(
+      application_id = "app-1235142",
       app_event_id = "12552352522",
-      app_name = "Test Application",
       app_time = System.currentTimeMillis(),
       job_id = 1,
       num_executors = 3,
@@ -56,8 +57,8 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     )
 
     val jobEndMessage = JobEndMessage(
+      application_id = "app-1235142",
       app_event_id = "app_event_123",
-      app_name = "ExampleApp",
       app_time = System.currentTimeMillis(),
       job_id = 42,
       num_executors = 5,
@@ -90,8 +91,8 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
       attempt_id = "1"
     )
     val appEndMessage = AppEndMessage(
+      application_id = "app-1235142",
       app_event_id = "12552352522",
-      app_name = "Test Application",
       app_time = System.currentTimeMillis(),
       num_executors = 5
     )
