@@ -41,7 +41,6 @@ class CentralizedSparkListenerTest extends AnyFunSuite with MockitoSugar with Sc
       // Start ZeroMQTestServer
       val server = new ZeroMQTestServer(port)
       val responseMessage = ResponseMessage(
-        application_id = "app-1235142",
         app_event_id = "test-app",
         recommended_scale_out = 5
       )

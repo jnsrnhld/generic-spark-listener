@@ -17,14 +17,12 @@ case class AppStartMessage(
                             ) extends Message
 
 case class AppEndMessage(
-                              application_id: String,
                               app_event_id: String,
                               app_time: Long,
                               num_executors: Int,
                             ) extends Message
 
 case class JobStartMessage(
-                           application_id: String,
                            app_event_id: String,
                            app_time: Long,
                            job_id: Int,
@@ -32,7 +30,6 @@ case class JobStartMessage(
                          ) extends Message
 
 case class JobEndMessage(
-                            application_id: String,
                             app_event_id: String,
                             app_time: Long,
                             job_id: Int,
@@ -43,7 +40,6 @@ case class JobEndMessage(
 
 
 case class ResponseMessage(
-                            application_id: String,
                             app_event_id: String,
                             recommended_scale_out: Int
                           ) extends Message

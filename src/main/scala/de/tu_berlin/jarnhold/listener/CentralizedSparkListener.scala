@@ -211,7 +211,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def sendJobStartMessage(jobId: Int, appTime: Long): ResponseMessage = {
     val message = JobStartMessage(
-      application_id = this.applicationId,
       app_event_id = this.appEventId,
       app_time = appTime,
       job_id = jobId,
@@ -222,7 +221,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def sendJobEndMessage(jobId: Int, appTime: Long, rescalingTimeRatio: Double, stages: Map[String, Stage]): ResponseMessage = {
     val message = JobEndMessage(
-      application_id = this.applicationId,
       app_event_id = this.appEventId,
       app_time = appTime,
       job_id = jobId,
@@ -249,7 +247,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def sendAppEndMessage(appTime: Long): ResponseMessage = {
     val message = AppEndMessage(
-      application_id = this.applicationId,
       app_event_id = this.appEventId,
       app_time = appTime,
       num_executors = this.currentScaleOut.get()
