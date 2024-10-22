@@ -9,6 +9,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ListBuffer
 import scala.util.Try
 
+/**
+ * Create a spark listener emitting spark events via a ZeroMQ client.
+ * @param sparkConf Is injected automatically to listener when added via "spark.extraListeners".
+ */
 class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private val logger: Logger = LoggerFactory.getLogger(classOf[CentralizedSparkListener])
@@ -40,6 +44,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   // stage monitoring
   private val stageInfoMap: StageInfoMap = new StageInfoMap()
 
+  /**
+   * For testing purposes.
+   */
   def this(sparkConf: SparkConf, sparkContext: SparkContext) = {
     this(sparkConf)
     this.sparkContext = sparkContext
@@ -144,6 +151,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
   }
 
+  /**
+   * Ensure spark context is set before calling.
+   */
   private def setInitialScaleOut(): Unit = {
     synchronized {
       val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
