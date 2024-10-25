@@ -39,7 +39,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
       stage_id = "1",
       stage_name = "example_stage",
       num_tasks = 100,
-      parent_stage_ids = "1",
+      parent_stage_ids = Array(1),
       attempt_id = 1,
       failure_reason = "",
       start_time = System.currentTimeMillis() - 5000L,

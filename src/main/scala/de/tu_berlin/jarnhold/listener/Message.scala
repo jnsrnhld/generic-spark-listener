@@ -56,7 +56,7 @@ case class Stage(
                   stage_id: String,
                   stage_name: String,
                   num_tasks: Int,
-                  parent_stage_ids: String,
+                  parent_stage_ids: Array[Int],
                   attempt_id: Int,
                   failure_reason: String,
                   start_time: Long,

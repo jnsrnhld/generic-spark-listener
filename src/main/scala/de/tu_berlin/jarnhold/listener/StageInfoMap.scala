@@ -67,7 +67,7 @@ class StageInfoMap {
         stage_id = f"${stageSubmit.id}",
         stage_name = stageSubmit.name,
         num_tasks = stageSubmit.numTasks,
-        parent_stage_ids = stageSubmit.parentIds.map(id => f"${id}").mkString(","),
+        parent_stage_ids = stageSubmit.parentIds,
         attempt_id = stageComplete.attemptId,
         failure_reason = stageComplete.failureReason,
         start_time = stageSubmit.time,
