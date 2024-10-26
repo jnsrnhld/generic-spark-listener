@@ -9,11 +9,11 @@ case class AppStartMessage(
                               application_id: String,
                               app_name: String,
                               app_time: Long,
-                              target_runtime: Int,
-                              initial_executors: Int,
-                              min_executors: Int,
-                              max_executors: Int,
                               attempt_id: String,
+                              app_specs: AppSpecs,
+                              driver_specs: DriverSpecs,
+                              executor_specs: ExecutorSpecs,
+                              environment_specs: EnvironmentSpecs
                             ) extends Message
 
 case class AppEndMessage(
@@ -70,3 +70,33 @@ case class Stage(
                   rdd_disk_size: Long,
                   metrics: StageMetrics,
                 )
+
+case class EnvironmentSpecs(
+                             machine_type: String,
+                             hadoop_version: String,
+                             spark_version: String,
+                             scala_version: String,
+                             java_version: String,
+                           )
+
+case class DriverSpecs(
+                        cores: Int,
+                        memory: String,
+                        memoryOverhead: Option[String]
+                      )
+
+case class ExecutorSpecs(
+                          cores: Int,
+                          memory: String,
+                          memoryOverhead: Option[String]
+                        )
+
+case class AppSpecs(
+                     algorithm_name: String,
+                     algorithm_args: Array[String],
+                     datasize_mb: Int,
+                     target_runtime: Int,
+                     initial_executors: Int,
+                     min_executors: Int,
+                     max_executors: Int,
+                   )

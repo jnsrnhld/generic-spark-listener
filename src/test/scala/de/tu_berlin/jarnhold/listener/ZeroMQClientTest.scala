@@ -1,6 +1,7 @@
 package de.tu_berlin.jarnhold.listener
 
 import de.tu_berlin.jarnhold.listener.JsonFormats.formats
+import org.apache.spark.SparkConf
 import org.json4s.native.Serialization
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
@@ -16,15 +17,34 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     recommended_scale_out = 5
   )
 
-  test("ZeroMQClient should send and receive job messages messages correctly") {
+  val sparkConf: SparkConf = new SparkConf()
+    .setAppName("Test Application")
+    .set("spark.customExtraListener.datasizeMb", "1024")
+    .set("spark.customExtraListener.targetRuntime", "30000")
+    .set("spark.customExtraListener.initialExecutors", "5")
+    .set("spark.customExtraListener.minExecutors", "2")
+    .set("spark.customExtraListener.maxExecutors", "10")
+    .set("spark.customExtraListener.driver.cores", "4")
+    .set("spark.customExtraListener.driver.memory", "8G")
+    .set("spark.customExtraListener.driver.memoryOverhead", "2G")
+    .set("spark.customExtraListener.executor.cores", "4")
+    .set("spark.customExtraListener.executor.memory", "16G")
+    .set("spark.customExtraListener.executor.memoryOverhead", "3G")
+    .set("spark.customExtraListener.env.hadoop_version", "3.2.0")
+    .set("spark.customExtraListener.env.spark_version", "3.1.1")
+    .set("spark.customExtraListener.env.scala_version", "2.12.10")
+    .set("spark.customExtraListener.env.java_version", "1.8.0_181")
+
+  test("ZeroMQClient should send and receive job messages correctly") {
     val (bridgeServiceAddress: String, server: ZeroMQTestServer, serverFuture: Future[Unit]) = startZMQServer
 
     val client = new ZeroMQClient(bridgeServiceAddress)
+
     val jobStartMessage = JobStartMessage(
       app_event_id = "12552352522",
       app_time = System.currentTimeMillis(),
       job_id = 1,
-      num_executors = 3,
+      num_executors = 3
     )
 
     val stageMetrics = StageMetrics(
@@ -73,20 +93,24 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     Await.ready(serverFuture, 2.seconds)
   }
 
-  test("ZeroMQClient should send and receive app messages messages correctly") {
+  test("ZeroMQClient should send and receive app messages correctly") {
     val (bridgeServiceAddress: String, server: ZeroMQTestServer, serverFuture: Future[Unit]) = startZMQServer
 
+    // Create SpecBuilder instance
+    val specBuilder = new SpecBuilder(sparkConf)
     val client = new ZeroMQClient(bridgeServiceAddress)
+
     val appStartMessage = AppStartMessage(
       application_id = "app-1235142",
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
-      target_runtime = 30000,
-      initial_executors = 5,
-      min_executors = 2,
-      max_executors =  10,
-      attempt_id = "1"
+      attempt_id = "1",
+      app_specs = specBuilder.buildAppSpecs(),
+      driver_specs = specBuilder.buildDriverSpecs(),
+      executor_specs = specBuilder.buildExecutorSpecs(),
+      environment_specs = specBuilder.buildEnvironmentSpecs()
     )
+
     val appEndMessage = AppEndMessage(
       app_event_id = "12552352522",
       app_time = System.currentTimeMillis(),

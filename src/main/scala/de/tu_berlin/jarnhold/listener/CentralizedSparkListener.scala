@@ -21,10 +21,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   // Listener configuration
   private val isAdaptive: Boolean = sparkConf.getBoolean("spark.customExtraListener.isAdaptive", defaultValue = true)
   private val bridgeServiceAddress: String = sparkConf.get("spark.customExtraListener.bridgeServiceAddress")
-  private val targetRuntime: Int = sparkConf.get("spark.customExtraListener.targetRuntime").toInt
-  private val initialExecutors: Int = sparkConf.get("spark.customExtraListener.initialExecutors").toInt
-  private val minExecutors: Int = sparkConf.get("spark.customExtraListener.minExecutors").toInt
-  private val maxExecutors: Int = sparkConf.get("spark.customExtraListener.maxExecutors").toInt
   private val active: Boolean = this.isAdaptive
 
   // Setup communication
@@ -170,13 +166,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val parametersList = List(
       "spark.customExtraListener.isAdaptive",
       "spark.customExtraListener.bridgeServiceAddress",
-      "spark.customExtraListener.targetRuntime",
-      "spark.customExtraListener.initialExecutors",
-      "spark.customExtraListener.minExecutors",
-      "spark.customExtraListener.maxExecutors",
     )
     logger.info("Current spark conf" + sparkConf.toDebugString)
-    for (param <- parametersList) {
+    for (param <- parametersList:::SpecBuilder.requiredSparkConfParams) {
       if (!sparkConf.contains(param)) {
         throw new IllegalArgumentException(s"Parameter $param is not specified in the environment!")
       }
@@ -232,15 +224,16 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   private def sendAppStartMessage(appTime: Long, appAttemptId: Option[String]): ResponseMessage = {
+    val specBuilder = new SpecBuilder(this.sparkConf)
     val message = AppStartMessage(
       application_id = this.applicationId,
       app_name = this.appSignature,
       app_time = appTime,
-      target_runtime = this.targetRuntime,
-      initial_executors = this.initialExecutors,
-      min_executors = this.minExecutors,
-      max_executors = this.maxExecutors,
-      attempt_id = appAttemptId.orNull
+      attempt_id = appAttemptId.orNull,
+      app_specs = specBuilder.buildAppSpecs(),
+      driver_specs = specBuilder.buildDriverSpecs(),
+      executor_specs = specBuilder.buildExecutorSpecs(),
+      environment_specs = specBuilder.buildEnvironmentSpecs(),
     )
     this.zeroMQClient.sendMessage(EventType.APPLICATION_START, message)
   }
