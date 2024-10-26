@@ -1,8 +1,11 @@
 package de.tu_berlin.jarnhold.listener
 
 import org.apache.spark.SparkConf
+import oshi.SystemInfo
+import oshi.hardware.{CentralProcessor, GlobalMemory, HWDiskStore, HardwareAbstractionLayer}
+import oshi.software.os.OperatingSystem
 
-import scala.jdk.CollectionConverters.asScalaIteratorConverter
+import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
 
 class SpecBuilder(sparkConf: SparkConf) {
 
@@ -24,45 +27,49 @@ class SpecBuilder(sparkConf: SparkConf) {
     AppSpecs(
       algorithm_name = algorithm,
       algorithm_args = params,
-      datasize_mb = sparkConf.get("spark.customExtraListener.datasizeMb").toInt,
+      datasize_mb = Math.max(1, sparkConf.getDouble("spark.customExtraListener.datasizeMb", 1.0).toInt),
       target_runtime = sparkConf.get("spark.customExtraListener.targetRuntime").toInt,
-      initial_executors = sparkConf.get("spark.customExtraListener.initialExecutors").toInt,
-      min_executors = sparkConf.get("spark.customExtraListener.minExecutors").toInt,
-      max_executors = sparkConf.get("spark.customExtraListener.maxExecutors").toInt
+      initial_executors = sparkConf.get("spark.dynamicAllocation.initialExecutors").toInt,
+      min_executors = sparkConf.get("spark.dynamicAllocation.minExecutors").toInt,
+      max_executors = sparkConf.get("spark.dynamicAllocation.maxExecutors").toInt
     )
   }
 
   def buildDriverSpecs(): DriverSpecs = {
     DriverSpecs(
-      cores = sparkConf.get("spark.customExtraListener.driver.cores").toInt,
-      memory = sparkConf.get("spark.customExtraListener.driver.memory"),
-      memoryOverhead = Option(sparkConf.get("spark.customExtraListener.driver.memoryOverhead", defaultValue = null))
+      cores = sparkConf.get("spark.driver.cores").toInt,
+      memory = sparkConf.get("spark.driver.memory"),
+      memoryOverhead = sparkConf.get("spark.executor.memoryOverhead")
     )
   }
 
   def buildExecutorSpecs(): ExecutorSpecs = {
     ExecutorSpecs(
-      cores = sparkConf.get("spark.customExtraListener.executor.cores").toInt,
-      memory = sparkConf.get("spark.customExtraListener.executor.memory"),
-      memoryOverhead = Option(sparkConf.get("spark.customExtraListener.executor.memoryOverhead", defaultValue = null))
+      cores = sparkConf.get("spark.executor.cores").toInt,
+      memory = sparkConf.get("spark.executor.memory"),
+      memory_overhead = sparkConf.get("spark.driver.memoryOverhead"),
     )
   }
 
   def buildEnvironmentSpecs(): EnvironmentSpecs = {
-    val os = System.getProperty("os.name").replaceAll("\\s+", "")
-    val cores = Runtime.getRuntime.availableProcessors()
-    val memory = java.lang.management.ManagementFactory.getOperatingSystemMXBean match {
-      case osBean: com.sun.management.OperatingSystemMXBean =>
-        osBean.getTotalMemorySize / (1024 * 1024 * 1024) + "G"
-      case _ => "UnknownMem"
-    }
-    val disk = java.nio.file.FileSystems.getDefault.getFileStores
-      .iterator()
-      .asScala
-      .map(_.getTotalSpace)
-      .sum / (1024 * 1024 * 1024) + "G"
+    val systemInfo = new SystemInfo()
 
-    val sysInfo = s"$os-$cores-$memory-$disk"
+    val hardware: HardwareAbstractionLayer = systemInfo.getHardware
+    val os: OperatingSystem = systemInfo.getOperatingSystem
+    val osName: String = os.toString.replaceAll("\\s+", "")
+
+    val processor: CentralProcessor = hardware.getProcessor
+    val availableCores: Int = processor.getLogicalProcessorCount
+
+    val diskStores: List[HWDiskStore] = hardware.getDiskStores.asScala.toList
+    val totalDiskBytes: Long = diskStores.map(_.getSize).sum
+    val totalDiskGb: Double = bytesToGigabytes(totalDiskBytes)
+
+    val memory: GlobalMemory = systemInfo.getHardware.getMemory
+    val totalPhysicalMemory: Long = memory.getTotal
+    val totalPhysicalMemoryMb: Double = bytesToMegabytes(totalPhysicalMemory)
+
+    val sysInfo = s"os:$osName-cores:$availableCores-memory:$totalPhysicalMemoryMb-disk_size:$totalDiskGb"
 
     EnvironmentSpecs(
       machine_type = sysInfo,
@@ -72,22 +79,31 @@ class SpecBuilder(sparkConf: SparkConf) {
       java_version = sparkConf.get("spark.customExtraListener.env.javaVersion"),
     )
   }
+
+  private def bytesToMegabytes(bytes: Long): Double = {
+    bytes / (1024.0 * 1024)
+  }
+
+  private def bytesToGigabytes(bytes: Long): Double = {
+    bytes / (1024.0 * 1024 * 1024)
+  }
+
 }
 
 // Companion object for static-like properties
 object SpecBuilder {
   val requiredSparkConfParams: List[String] = List(
+    "spark.driver.cores",
+    "spark.driver.memory",
+    "spark.driver.memoryOverhead",
+    "spark.executor.cores",
+    "spark.executor.memory",
+    "spark.executor.memoryOverhead",
     "spark.customExtraListener.datasizeMb",
     "spark.customExtraListener.targetRuntime",
-    "spark.customExtraListener.initialExecutors",
-    "spark.customExtraListener.minExecutors",
-    "spark.customExtraListener.maxExecutors",
-    "spark.customExtraListener.driver.cores",
-    "spark.customExtraListener.driver.memory",
-    "spark.customExtraListener.driver.memoryOverhead",
-    "spark.customExtraListener.executor.cores",
-    "spark.customExtraListener.executor.memory",
-    "spark.customExtraListener.executor.memoryOverhead",
+    "spark.dynamicAllocation.initialExecutors",
+    "spark.dynamicAllocation.minExecutors",
+    "spark.dynamicAllocation.maxExecutors",
     "spark.customExtraListener.env.hadoopVersion",
     "spark.customExtraListener.env.sparkVersion",
     "spark.customExtraListener.env.scalaVersion",
