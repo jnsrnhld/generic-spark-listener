@@ -30,10 +30,10 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     .set("spark.customExtraListener.executor.cores", "4")
     .set("spark.customExtraListener.executor.memory", "16G")
     .set("spark.customExtraListener.executor.memoryOverhead", "3G")
-    .set("spark.customExtraListener.env.hadoop_version", "3.2.0")
-    .set("spark.customExtraListener.env.spark_version", "3.1.1")
-    .set("spark.customExtraListener.env.scala_version", "2.12.10")
-    .set("spark.customExtraListener.env.java_version", "1.8.0_181")
+    .set("spark.customExtraListener.env.hadoopVersion", "3.2.0")
+    .set("spark.customExtraListener.env.sparkVersion", "3.1.1")
+    .set("spark.customExtraListener.env.scalaVersion", "2.12.10")
+    .set("spark.customExtraListener.env.javaVersion", "1.8.0_181")
 
   test("ZeroMQClient should send and receive job messages correctly") {
     val (bridgeServiceAddress: String, server: ZeroMQTestServer, serverFuture: Future[Unit]) = startZMQServer
