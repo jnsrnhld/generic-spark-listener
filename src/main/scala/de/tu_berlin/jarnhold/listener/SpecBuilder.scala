@@ -66,10 +66,10 @@ class SpecBuilder(sparkConf: SparkConf) {
 
     EnvironmentSpecs(
       machine_type = sysInfo,
-      hadoop_version = sparkConf.get("spark.customExtraListener.env.hadoop_version"),
-      spark_version = sparkConf.get("spark.customExtraListener.env.spark_version"),
-      scala_version = sparkConf.get("spark.customExtraListener.env.scala_version"),
-      java_version = sparkConf.get("spark.customExtraListener.env.java_version")
+      hadoop_version = sparkConf.get("spark.customExtraListener.env.hadoopVersion"),
+      spark_version = sparkConf.get("spark.customExtraListener.env.sparkVersion"),
+      scala_version = sparkConf.get("spark.customExtraListener.env.scalaVersion"),
+      java_version = sparkConf.get("spark.customExtraListener.env.javaVersion"),
     )
   }
 }
@@ -88,9 +88,9 @@ object SpecBuilder {
     "spark.customExtraListener.executor.cores",
     "spark.customExtraListener.executor.memory",
     "spark.customExtraListener.executor.memoryOverhead",
-    "spark.customExtraListener.env.hadoop_version",
-    "spark.customExtraListener.env.spark_version",
-    "spark.customExtraListener.env.scala_version",
-    "spark.customExtraListener.env.java_version"
+    "spark.customExtraListener.env.hadoopVersion",
+    "spark.customExtraListener.env.sparkVersion",
+    "spark.customExtraListener.env.scalaVersion",
+    "spark.customExtraListener.env.javaVersion"
   )
 }
