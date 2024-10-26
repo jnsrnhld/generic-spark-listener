@@ -42,7 +42,7 @@ class SpecBuilder(sparkConf: SparkConf) {
     DriverSpecs(
       cores = sparkConf.get("spark.driver.cores").toInt,
       memory = sparkConf.get("spark.driver.memory"),
-      memoryOverhead = extractMemoryOverhead
+      memory_overhead = extractMemoryOverhead
     )
   }
 

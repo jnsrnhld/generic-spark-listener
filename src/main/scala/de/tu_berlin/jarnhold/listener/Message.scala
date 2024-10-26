@@ -82,7 +82,7 @@ case class EnvironmentSpecs(
 case class DriverSpecs(
                         cores: Int,
                         memory: String,
-                        memoryOverhead: String
+                        memory_overhead: String
                       )
 
 case class ExecutorSpecs(
