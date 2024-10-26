@@ -15,11 +15,14 @@ class SpecBuilder(sparkConf: SparkConf) {
    */
   private val hibenchAppFromParamsSeparator: String = "with Params\\("
 
+  private val defaultSparkMemoryOverhead = 0.1
+
   def buildAppSpecs(): AppSpecs = {
     val (algorithm, params) = sparkConf.get("spark.app.name").split(hibenchAppFromParamsSeparator) match {
       case Array(firstPart, secondPart) =>
+        val algorith_name = firstPart.trim
         val paramsList = secondPart.stripSuffix(")").split(",").map(_.trim)
-        (firstPart, paramsList)
+        (algorith_name, paramsList)
       case _ =>
         (sparkConf.get("spark.app.name"), Array.empty[String])
     }
@@ -39,7 +42,7 @@ class SpecBuilder(sparkConf: SparkConf) {
     DriverSpecs(
       cores = sparkConf.get("spark.driver.cores").toInt,
       memory = sparkConf.get("spark.driver.memory"),
-      memoryOverhead = sparkConf.get("spark.executor.memoryOverhead")
+      memoryOverhead = extractMemoryOverhead
     )
   }
 
@@ -47,7 +50,7 @@ class SpecBuilder(sparkConf: SparkConf) {
     ExecutorSpecs(
       cores = sparkConf.get("spark.executor.cores").toInt,
       memory = sparkConf.get("spark.executor.memory"),
-      memory_overhead = sparkConf.get("spark.driver.memoryOverhead"),
+      memory_overhead = extractMemoryOverhead
     )
   }
 
@@ -86,6 +89,16 @@ class SpecBuilder(sparkConf: SparkConf) {
 
   private def bytesToGigabytes(bytes: Long): Double = {
     bytes / (1024.0 * 1024 * 1024)
+  }
+
+  private def extractMemoryOverhead = {
+    sparkConf.getOption("spark.executor.memoryOverhead")
+      .getOrElse({
+        val memoryStr = sparkConf.get("spark.executor.memory")
+        val memoryValue = memoryStr.replaceAll("[^0-9.]", "").toDouble
+        val memoryUnit = memoryStr.replaceAll("[0-9.]", "")
+        (memoryValue * defaultSparkMemoryOverhead).toString + memoryUnit
+      })
   }
 
 }
