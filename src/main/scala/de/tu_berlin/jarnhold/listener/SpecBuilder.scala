@@ -1,5 +1,6 @@
 package de.tu_berlin.jarnhold.listener
 
+import de.tu_berlin.jarnhold.listener.NodeType.NodeType
 import org.apache.spark.SparkConf
 import oshi.SystemInfo
 import oshi.hardware.{CentralProcessor, GlobalMemory, HWDiskStore, HardwareAbstractionLayer}
@@ -42,7 +43,7 @@ class SpecBuilder(sparkConf: SparkConf) {
     DriverSpecs(
       cores = sparkConf.get("spark.driver.cores").toInt,
       memory = sparkConf.get("spark.driver.memory"),
-      memory_overhead = extractMemoryOverhead
+      memory_overhead = extractMemoryOverhead(NodeType.DRIVER)
     )
   }
 
@@ -50,7 +51,7 @@ class SpecBuilder(sparkConf: SparkConf) {
     ExecutorSpecs(
       cores = sparkConf.get("spark.executor.cores").toInt,
       memory = sparkConf.get("spark.executor.memory"),
-      memory_overhead = extractMemoryOverhead
+      memory_overhead = extractMemoryOverhead(NodeType.EXECUTOR)
     )
   }
 
@@ -91,10 +92,10 @@ class SpecBuilder(sparkConf: SparkConf) {
     bytes / (1024.0 * 1024 * 1024)
   }
 
-  private def extractMemoryOverhead = {
-    sparkConf.getOption("spark.executor.memoryOverhead")
+  private def extractMemoryOverhead(nodeType: NodeType): String = {
+    sparkConf.getOption(s"spark.${nodeType.toString.toLowerCase}.memoryOverhead")
       .getOrElse({
-        val memoryStr = sparkConf.get("spark.executor.memory")
+        val memoryStr = sparkConf.get(s"spark.${nodeType.toString.toLowerCase}.memory")
         val memoryValue = memoryStr.replaceAll("[^0-9.]", "").toDouble
         val memoryUnit = memoryStr.replaceAll("[0-9.]", "")
         (memoryValue * defaultSparkMemoryOverhead).toString + memoryUnit
@@ -103,15 +104,18 @@ class SpecBuilder(sparkConf: SparkConf) {
 
 }
 
+object NodeType extends Enumeration {
+  type NodeType = Value
+  val DRIVER, EXECUTOR = Value
+}
+
 // Companion object for static-like properties
 object SpecBuilder {
   val requiredSparkConfParams: List[String] = List(
     "spark.driver.cores",
     "spark.driver.memory",
-    "spark.driver.memoryOverhead",
     "spark.executor.cores",
     "spark.executor.memory",
-    "spark.executor.memoryOverhead",
     "spark.customExtraListener.datasizeMb",
     "spark.customExtraListener.targetRuntime",
     "spark.dynamicAllocation.initialExecutors",
