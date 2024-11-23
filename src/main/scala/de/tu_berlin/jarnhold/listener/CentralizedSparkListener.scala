@@ -230,6 +230,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       app_name = this.appSignature,
       app_time = appTime,
       attempt_id = appAttemptId.orNull,
+      is_adaptive = this.isAdaptive,
       app_specs = specBuilder.buildAppSpecs(),
       driver_specs = specBuilder.buildDriverSpecs(),
       executor_specs = specBuilder.buildExecutorSpecs(),
