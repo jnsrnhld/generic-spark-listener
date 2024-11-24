@@ -57,32 +57,21 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    if (!this.active) {
-      return
-    }
-
     val jobId = jobStart.jobId
     if (isInitialJobOfSparkApplication(jobId)) {
       ensureSparkContextIsSet()
       setInitialScaleOut()
     }
-
     this.stageInfoMap.addJob(jobStart)
     sendJobStartMessage(jobStart.jobId, jobStart.time)
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-    if (!this.active) {
-      return
-    }
     val scaleOut = this.currentScaleOut.get()
     this.stageInfoMap.addStageSubmit(scaleOut, stageSubmitted)
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
-    if (!this.active) {
-      return
-    }
    val rescalingTimeRatio = computeRescalingTimeRatio(
       stageCompleted.stageInfo.submissionTime.getOrElse(0L),
       stageCompleted.stageInfo.completionTime.getOrElse(0L)
@@ -92,10 +81,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-    if (!this.active) {
-      return
-    }
-
     val jobId = jobEnd.jobId
     val jobDuration = jobEnd.time
     val rescalingTimeRatio: Double = computeRescalingTimeRatio(this.appStartTime, jobEnd.time)
@@ -111,9 +96,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-    if (!this.active) {
-      return
-    }
     this.sendAppEndMessage(applicationEnd.time)
     this.zeroMQClient.close()
   }
