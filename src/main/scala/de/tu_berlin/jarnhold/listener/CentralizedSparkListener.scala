@@ -33,7 +33,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private var appEventId: String = _
   private var appStartTime: Long = _
   private var sparkContext: SparkContext = _
-  private val currentScaleOut = new AtomicInteger(0)
+  private val currentScaleOut = new AtomicInteger(sparkConf.getInt("spark.dynamicAllocation.initialExecutors", defaultValue = 1))
 
   // scale-out, time of measurement, total time
   private val scaleOutBuffer: ListBuffer[(Int, Long)] = ListBuffer()
@@ -54,6 +54,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val response = sendAppStartMessage(appStartTime, appAttemptId)
     this.appEventId = response.app_event_id
     this.appStartTime = appStartTime
+    adjustScaleOutIfNecessary(response)
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -63,7 +64,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       setInitialScaleOut()
     }
     this.stageInfoMap.addJob(jobStart)
-    sendJobStartMessage(jobStart.jobId, jobStart.time)
+    val response = sendJobStartMessage(jobStart.jobId, jobStart.time)
+    adjustScaleOutIfNecessary(response)
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
@@ -86,13 +88,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val rescalingTimeRatio: Double = computeRescalingTimeRatio(this.appStartTime, jobEnd.time)
     val stages = this.stageInfoMap.getStages(jobId)
     val response = sendJobEndMessage(jobId, jobDuration, rescalingTimeRatio, stages)
-
-    val recommendedScaleOut = response.recommended_scale_out
-    if (recommendedScaleOut != this.currentScaleOut.get()) {
-      logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
-      val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
-      logger.info("Request acknowledged? => " + requestResult.toString)
-    }
+    adjustScaleOutIfNecessary(response)
   }
 
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
@@ -106,6 +102,15 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
     handleScaleOutMonitoring(Option(executorRemoved.time), "NO_HOST")
+  }
+
+  private def adjustScaleOutIfNecessary(response: ResponseMessage): Unit = {
+    val recommendedScaleOut = response.recommended_scale_out
+    if (recommendedScaleOut != this.currentScaleOut.get()) {
+      logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
+      val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
+      logger.info("Request acknowledged? => " + requestResult.toString)
+    }
   }
 
   private def handleScaleOutMonitoring(executorActionTime: Option[Long], executorHost: String): Unit = {
