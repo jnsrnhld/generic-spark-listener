@@ -33,7 +33,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private var appEventId: String = _
   private var appStartTime: Long = _
   private var sparkContext: SparkContext = _
-  private val currentScaleOut = new AtomicInteger(sparkConf.getInt("spark.dynamicAllocation.initialExecutors", defaultValue = 1))
+  private var initialScaleOut: Integer = _
+  private val currentScaleOut = new AtomicInteger(0)
 
   // scale-out, time of measurement, total time
   private val scaleOutBuffer: ListBuffer[(Int, Long)] = ListBuffer()
@@ -54,14 +55,28 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val response = sendAppStartMessage(appStartTime, appAttemptId)
     this.appEventId = response.app_event_id
     this.appStartTime = appStartTime
-    adjustScaleOutIfNecessary(response)
+    this.initialScaleOut = response.recommended_scale_out
+  }
+
+  /**
+   * The SparkContext is not yet fully initialized when AppStart is fired, but on EnvironmentUpdate. This is the moment
+   * right before Spark is going to request executors.
+   */
+  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = {
+    this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
+    logger.info(
+      "SparkContext successfully registered in CentralizedSparkListener. Requesting executors: {}",
+      this.initialScaleOut
+    )
+    this.sparkContext.requestTotalExecutors(this.initialScaleOut, 0, Map[String, Int]())
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     val jobId = jobStart.jobId
     if (isInitialJobOfSparkApplication(jobId)) {
-      ensureSparkContextIsSet()
-      setInitialScaleOut()
+      // Because the number of requested executors might differ from the actual amount,
+      // we verify how many executors are actually present
+      setActualScaleOut()
     }
     this.stageInfoMap.addJob(jobStart)
     val response = sendJobStartMessage(jobStart.jobId, jobStart.time)
@@ -137,7 +152,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   /**
    * Ensure spark context is set before calling.
    */
-  private def setInitialScaleOut(): Unit = {
+  private def setActualScaleOut(): Unit = {
     synchronized {
       val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
       val driverHost: String = getDriverHost
@@ -233,18 +248,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       num_executors = this.currentScaleOut.get()
     )
     this.zeroMQClient.sendMessage(EventType.APPLICATION_END, message)
-  }
-
-
-  /**
-   * Only call after ApplicationStart: Otherwise a second SparkContext will be created which will eventually crash
-   * the application execution.
-   */
-  private def ensureSparkContextIsSet(): Unit = {
-    if (this.sparkContext == null) {
-      this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
-      logger.info("SparkContext successfully registered in CentralizedSparkListener")
-    }
   }
 
   /**
