@@ -97,7 +97,6 @@ case class AppSpecs(
                      algorithm_args: Array[String],
                      datasize_mb: Int,
                      target_runtime: Int,
-                     initial_executors: Int,
                      min_executors: Int,
                      max_executors: Int,
                    )

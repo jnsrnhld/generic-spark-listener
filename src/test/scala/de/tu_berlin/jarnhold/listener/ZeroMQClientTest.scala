@@ -21,7 +21,6 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
     .setAppName("Test Application")
     .set("spark.customExtraListener.datasizeMb", "1024")
     .set("spark.customExtraListener.targetRuntime", "30000")
-    .set("spark.dynamicAllocation.initialExecutors", "5")
     .set("spark.dynamicAllocation.minExecutors", "2")
     .set("spark.dynamicAllocation.maxExecutors", "10")
     .set("spark.driver.cores", "4")

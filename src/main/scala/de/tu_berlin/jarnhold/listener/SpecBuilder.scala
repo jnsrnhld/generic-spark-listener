@@ -33,7 +33,6 @@ class SpecBuilder(sparkConf: SparkConf) {
       algorithm_args = params,
       datasize_mb = Math.max(1, sparkConf.getDouble("spark.customExtraListener.datasizeMb", 1.0).toInt),
       target_runtime = sparkConf.get("spark.customExtraListener.targetRuntime").toInt,
-      initial_executors = sparkConf.get("spark.dynamicAllocation.initialExecutors").toInt,
       min_executors = sparkConf.get("spark.dynamicAllocation.minExecutors").toInt,
       max_executors = sparkConf.get("spark.dynamicAllocation.maxExecutors").toInt
     )
@@ -118,7 +117,6 @@ object SpecBuilder {
     "spark.executor.memory",
     "spark.customExtraListener.datasizeMb",
     "spark.customExtraListener.targetRuntime",
-    "spark.dynamicAllocation.initialExecutors",
     "spark.dynamicAllocation.minExecutors",
     "spark.dynamicAllocation.maxExecutors",
     "spark.customExtraListener.env.hadoopVersion",
