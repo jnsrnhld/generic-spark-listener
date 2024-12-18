@@ -9,7 +9,6 @@ case class AppStartMessage(
                               application_id: String,
                               app_name: String,
                               app_time: Long,
-                              attempt_id: String,
                               is_adaptive: Boolean,
                               app_specs: AppSpecs,
                               driver_specs: DriverSpecs,

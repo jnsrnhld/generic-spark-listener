@@ -1,7 +1,7 @@
 package de.tu_berlin.jarnhold.listener
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted, StageInfo}
+import org.apache.spark.scheduler._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.native.Serialization
 import org.json4s.{DefaultFormats, Formats}
@@ -51,9 +51,8 @@ class CentralizedSparkListenerTest extends AnyFunSuite with MockitoSugar with Sc
       val listener = new CentralizedSparkListener(sparkConf, sparkContext)
 
       // Mock application start event
-      val appStart = mock[SparkListenerApplicationStart]
-      when(appStart.time).thenReturn(System.currentTimeMillis())
-      listener.onApplicationStart(appStart)
+      val environmentUpdate = mock[SparkListenerEnvironmentUpdate]
+      listener.onEnvironmentUpdate(environmentUpdate)
 
       // Mock job start event
       val jobStart = mock[SparkListenerJobStart]

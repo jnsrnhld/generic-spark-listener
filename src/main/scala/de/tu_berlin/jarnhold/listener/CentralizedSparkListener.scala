@@ -49,24 +49,28 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.sparkContext = sparkContext
   }
 
-  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    val appAttemptId = applicationStart.appAttemptId
-    val appStartTime = applicationStart.time
-    val response = sendAppStartMessage(appStartTime, appAttemptId)
+  /**
+   * The SparkContext is not yet fully initialized when SparkListenerAppStart is fired, but on EnvironmentUpdate, which
+   * is fired concurrently to AppStart. Once Spark has collected information on the runtime environment, but before any
+   * job start, the event is fired. It provides a snapshot of the configuration and environment that Spark will operate
+   * in for the rest of the application’s lifetime.
+   *
+   * We use it to signal the app start to the server and ask for an initial scale out, which is immediately requested
+   * via the SparkContext.
+   */
+  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = {
+
+    // calling this on AppStart would cause a second SparkContext creation, which would cause an error in the Spark app
+    this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
+
+    val response = sendAppStartMessage()
     this.appEventId = response.app_event_id
     this.appStartTime = appStartTime
     this.initialScaleOut = response.recommended_scale_out
-  }
 
-  /**
-   * The SparkContext is not yet fully initialized when AppStart is fired, but on EnvironmentUpdate. This is the moment
-   * right before Spark is going to request executors.
-   */
-  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = {
-    this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
     logger.info(
-      "SparkContext successfully registered in CentralizedSparkListener. Requesting executors: {}",
-      this.initialScaleOut
+      "SparkContext successfully registered in CentralizedSparkListener and executor recommendation received. "
+        + "Requesting {} executors", this.initialScaleOut
     )
     this.sparkContext.requestTotalExecutors(this.initialScaleOut, 0, Map[String, Int]())
   }
@@ -225,13 +229,12 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.zeroMQClient.sendMessage(EventType.JOB_END, message)
   }
 
-  private def sendAppStartMessage(appTime: Long, appAttemptId: Option[String]): ResponseMessage = {
+  private def sendAppStartMessage(): ResponseMessage = {
     val specBuilder = new SpecBuilder(this.sparkConf)
     val message = AppStartMessage(
       application_id = this.applicationId,
       app_name = this.appSignature,
-      app_time = appTime,
-      attempt_id = appAttemptId.orNull,
+      app_time = System.currentTimeMillis(),
       is_adaptive = this.isAdaptive,
       app_specs = specBuilder.buildAppSpecs(),
       driver_specs = specBuilder.buildDriverSpecs(),
