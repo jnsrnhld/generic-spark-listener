@@ -74,9 +74,13 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     val jobId = jobStart.jobId
     if (isInitialJobOfSparkApplication(jobId)) {
-      // Because the number of requested executors might differ from the actual amount,
+      // because the number of requested executors might differ from the actual amount,
       // we verify how many executors are actually present
-      setActualScaleOut()
+      //
+      // additionally, although this is an edge case, the first Job might start when the executors are not ready yet
+      while (this.currentScaleOut.get() == 0) {
+        setActualScaleOut()
+      }
     }
     this.stageInfoMap.addJob(jobStart)
     val response = sendJobStartMessage(jobStart.jobId, jobStart.time)
