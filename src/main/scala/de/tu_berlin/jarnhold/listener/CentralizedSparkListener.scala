@@ -24,7 +24,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private val active: Boolean = this.isAdaptive
 
   // Setup communication
-  checkConfigurations()
   private val zeroMQClient = new ZeroMQClient(bridgeServiceAddress)
 
   // Application parameters
@@ -60,6 +59,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
    */
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = {
 
+    checkConfigurations(this.sparkConf)
     // calling this on AppStart would cause a second SparkContext creation, which would cause an error in the Spark app
     this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
 
@@ -168,13 +168,9 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     }
   }
 
-  private def checkConfigurations(): Unit = {
-    val parametersList = List(
-      "spark.customExtraListener.isAdaptive",
-      "spark.customExtraListener.bridgeServiceAddress",
-    )
+  private def checkConfigurations(sparkConf: SparkConf): Unit = {
     logger.info("Current spark conf" + sparkConf.toDebugString)
-    for (param <- parametersList:::SpecBuilder.requiredSparkConfParams) {
+    for (param <- SpecBuilder.requiredSparkConfParams) {
       if (!sparkConf.contains(param)) {
         throw new IllegalArgumentException(s"Parameter $param is not specified in the environment!")
       }
