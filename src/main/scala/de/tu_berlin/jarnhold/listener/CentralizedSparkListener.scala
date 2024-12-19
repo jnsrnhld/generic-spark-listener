@@ -1,10 +1,12 @@
 package de.tu_berlin.jarnhold.listener
 
 import de.tu_berlin.jarnhold.listener.SafeDivision.saveDivision
+import org.apache.commons.lang3.time.StopWatch
 import org.apache.spark.scheduler._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.slf4j.{Logger, LoggerFactory}
 
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ListBuffer
 import scala.util.Try
@@ -22,6 +24,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private val isAdaptive: Boolean = sparkConf.getBoolean("spark.customExtraListener.isAdaptive", defaultValue = true)
   private val bridgeServiceAddress: String = sparkConf.get("spark.customExtraListener.bridgeServiceAddress")
   private val active: Boolean = this.isAdaptive
+  private val executorRequestTimeout: Integer = Option(System.getenv("EXECUTOR_REQUEST_TIMEOUT")).getOrElse("10000").toInt
+  private val executorRequestStopWatch: StopWatch = StopWatch.create()
 
   // Setup communication
   private val zeroMQClient = new ZeroMQClient(bridgeServiceAddress)
@@ -48,16 +52,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.sparkContext = sparkContext
   }
 
-  /**
-   * The SparkContext is not yet fully initialized when SparkListenerAppStart is fired, but on EnvironmentUpdate, which
-   * is fired concurrently to AppStart. Once Spark has collected information on the runtime environment, but before any
-   * job start, the event is fired. It provides a snapshot of the configuration and environment that Spark will operate
-   * in for the rest of the application’s lifetime.
-   *
-   * We use it to signal the app start to the server and ask for an initial scale out, which is immediately requested
-   * via the SparkContext.
-   */
-  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = {
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
 
     checkConfigurations(this.sparkConf)
     // calling this on AppStart would cause a second SparkContext creation, which would cause an error in the Spark app
@@ -73,6 +68,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
         + "Requesting {} executors", this.initialScaleOut
     )
     this.sparkContext.requestTotalExecutors(this.initialScaleOut, 0, Map[String, Int]())
+    this.executorRequestStopWatch.start()
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -126,9 +122,17 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private def adjustScaleOutIfNecessary(response: ResponseMessage): Unit = {
     val recommendedScaleOut = response.recommended_scale_out
     if (recommendedScaleOut != this.currentScaleOut.get()) {
+
+      this.executorRequestStopWatch.stop()
+      // for fast jobs, we don't want to request different amounts of executors too often
+      if (this.executorRequestStopWatch.getTime(TimeUnit.MILLISECONDS) < this.executorRequestTimeout) {
+        return
+      }
+
       logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
       val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
       logger.info("Request acknowledged? => " + requestResult.toString)
+      this.executorRequestStopWatch.start()
     }
   }
 
