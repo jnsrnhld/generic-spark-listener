@@ -3,6 +3,12 @@ package de.tu_berlin.jarnhold.listener
 import de.tu_berlin.jarnhold.listener.EventType.EventType
 
 sealed trait Message
+
+trait AppRuntimeMessage extends Message {
+  def app_event_id: String
+  def num_executors: Int
+}
+
 case class MessageEnvelope[T](event_type: EventType, payload: T) extends Message
 
 case class AppStartMessage(
@@ -20,14 +26,14 @@ case class AppEndMessage(
                               app_event_id: String,
                               app_time: Long,
                               num_executors: Int,
-                            ) extends Message
+                            ) extends AppRuntimeMessage
 
 case class JobStartMessage(
                            app_event_id: String,
                            app_time: Long,
                            job_id: Int,
                            num_executors: Int,
-                         ) extends Message
+                         ) extends AppRuntimeMessage
 
 case class JobEndMessage(
                             app_event_id: String,
@@ -36,7 +42,7 @@ case class JobEndMessage(
                             num_executors: Int,
                             rescaling_time_ratio: Double,
                             stages: Map[String, Stage]
-                          ) extends Message
+                          ) extends AppRuntimeMessage
 
 
 case class ResponseMessage(
