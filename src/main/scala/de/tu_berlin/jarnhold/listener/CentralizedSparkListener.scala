@@ -55,7 +55,6 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
 
     checkConfigurations(this.sparkConf)
-    // calling this on AppStart would cause a second SparkContext creation, which would cause an error in the Spark app
     this.sparkContext = SparkContext.getOrCreate(this.sparkConf)
 
     val response = sendAppStartMessage()
