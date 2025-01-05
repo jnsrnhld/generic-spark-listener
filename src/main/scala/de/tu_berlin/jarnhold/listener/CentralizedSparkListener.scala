@@ -13,6 +13,7 @@ import scala.util.Try
 
 /**
  * Create a spark listener emitting spark events via a ZeroMQ client.
+ *
  * @param sparkConf Is injected automatically to listener when added via "spark.extraListeners".
  */
 class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
@@ -37,7 +38,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private var appStartTime: Long = _
   private var sparkContext: SparkContext = _
   private var initialScaleOut: Integer = _
-  private val currentScaleOut = new AtomicInteger(0)
+  private val lastKnownScaleOut = new AtomicInteger(0)
 
   // scale-out, time of measurement, total time
   private val scaleOutBuffer: ListBuffer[(Int, Long)] = ListBuffer()
@@ -66,37 +67,32 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       "SparkContext successfully registered in CentralizedSparkListener and executor recommendation received. "
         + "Requesting {} executors", this.initialScaleOut
     )
-    this.sparkContext.requestTotalExecutors(this.initialScaleOut, 0, Map[String, Int]())
     this.executorRequestStopWatch.start()
+    this.sparkContext.requestTotalExecutors(this.initialScaleOut, 0, Map[String, Int]())
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    val jobId = jobStart.jobId
-    if (isInitialJobOfSparkApplication(jobId)) {
-      // because the number of requested executors might differ from the actual amount,
-      // we verify how many executors are actually present
-      //
-      // additionally, although this is an edge case, the first Job might start when the executors are not ready yet
-      while (this.currentScaleOut.get() == 0) {
-        setActualScaleOut()
+    val response: ResponseMessage =
+      if (isInitialJobOfSparkApplication(jobStart.jobId)) {
+        sendJobStartMessage(jobStart.jobId, jobStart.time, this.initialScaleOut)
+      } else {
+        sendJobStartMessage(jobStart.jobId, jobStart.time, getScaleOutFromSparkContext)
       }
-    }
     this.stageInfoMap.addJob(jobStart)
-    val response = sendJobStartMessage(jobStart.jobId, jobStart.time)
     adjustScaleOutIfNecessary(response)
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-    val scaleOut = this.currentScaleOut.get()
+    val scaleOut = this.lastKnownScaleOut.get()
     this.stageInfoMap.addStageSubmit(scaleOut, stageSubmitted)
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
-   val rescalingTimeRatio = computeRescalingTimeRatio(
+    val rescalingTimeRatio = computeRescalingTimeRatio(
       stageCompleted.stageInfo.submissionTime.getOrElse(0L),
       stageCompleted.stageInfo.completionTime.getOrElse(0L)
     )
-    val scaleOut = this.currentScaleOut.get()
+    val scaleOut = this.lastKnownScaleOut.get()
     this.stageInfoMap.addStageComplete(scaleOut, rescalingTimeRatio, stageCompleted)
   }
 
@@ -115,64 +111,62 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-    handleScaleOutMonitoring(Option(executorAdded.time), executorAdded.executorInfo.executorHost)
+    handleScaleOutMonitoring(executorAdded.time)
   }
 
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-    handleScaleOutMonitoring(Option(executorRemoved.time), "NO_HOST")
+    handleScaleOutMonitoring(executorRemoved.time)
   }
 
   private def adjustScaleOutIfNecessary(response: ResponseMessage): Unit = {
-    val recommendedScaleOut = response.recommended_scale_out
-    if (recommendedScaleOut != this.currentScaleOut.get()) {
+    try {
+      val recommendedScaleOut = response.recommended_scale_out
+      if (recommendedScaleOut != this.lastKnownScaleOut.get()) {
 
-      this.executorRequestStopWatch.stop()
-      // for fast jobs, we don't want to request different amounts of executors too often
-      if (this.executorRequestStopWatch.getTime(TimeUnit.MILLISECONDS) < this.executorRequestTimeout) {
-        return
+        if (!this.executorRequestStopWatch.isStopped) {
+          this.executorRequestStopWatch.stop()
+        }
+        // for fast jobs, we don't want to request different amounts of executors too often
+        if (this.executorRequestStopWatch.getTime(TimeUnit.MILLISECONDS) < this.executorRequestTimeout) {
+          return
+        }
+
+        logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
+        val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
+        logger.info("Request acknowledged? => " + requestResult.toString)
+        this.executorRequestStopWatch.start()
       }
-
-      logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
-      val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
-      logger.info("Request acknowledged? => " + requestResult.toString)
-      this.executorRequestStopWatch.start()
+    } catch {
+      case ex: Throwable => logger.error("An error occurred while trying to re-scale executors", ex)
     }
   }
 
-  private def handleScaleOutMonitoring(executorActionTime: Option[Long], executorHost: String): Unit = {
+  private def handleScaleOutMonitoring(executorActionTime: Long): Unit = {
     synchronized {
-      // the executors might be added before actual application start => there won't be a SparkContext yet in this case,
-      // thus also no current scale out to monitor yet
-      if (!this.active || this.sparkContext == null) {
-        return
-      }
-      // An executor was removed? Else, an executor was added
-      if (executorHost == "NO_HOST") {
-        this.currentScaleOut.decrementAndGet()
-      } else {
-        this.currentScaleOut.incrementAndGet()
-      }
-
-      logger.info(s"Current number of executors: ${currentScaleOut.get()}.")
-      if (executorActionTime.isDefined) {
-        scaleOutBuffer.append((currentScaleOut.get(), executorActionTime.get))
-      }
+      val scaleOut = getScaleOutFromSparkContext
+      scaleOutBuffer.append((scaleOut, executorActionTime))
     }
   }
 
   /**
    * Ensure spark context is set before calling.
    */
-  private def setActualScaleOut(): Unit = {
-    synchronized {
-      val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
-      val driverHost: String = getDriverHost
-      val scaleOut = allExecutors
-        .filter(!_.split(":")(0).equals(driverHost))
-        .toList
-        .length
-      this.currentScaleOut.set(scaleOut)
+  private def getScaleOutFromSparkContext: Int = {
+
+    // last job event might be emitted after context is already terminated
+    if (this.sparkContext.isStopped) {
+      return this.lastKnownScaleOut.get()
     }
+
+    val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
+    val driverHost: String = getDriverHost
+    val currentScaleOut = allExecutors
+      .filter(!_.split(":")(0).equals(driverHost))
+      .toList
+      .length
+
+    this.lastKnownScaleOut.set(currentScaleOut)
+    currentScaleOut
   }
 
   private def checkConfigurations(sparkConf: SparkConf): Unit = {
@@ -210,12 +204,12 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     saveDivision(dividend, endTime - startTime)
   }
 
-  private def sendJobStartMessage(jobId: Int, appTime: Long): ResponseMessage = {
+  private def sendJobStartMessage(jobId: Int, appTime: Long, scaleOut: Int): ResponseMessage = {
     val message = JobStartMessage(
       app_event_id = this.appEventId,
       app_time = appTime,
       job_id = jobId,
-      num_executors = this.currentScaleOut.get(),
+      num_executors = scaleOut,
     )
     this.zeroMQClient.sendMessage(EventType.JOB_START, message)
   }
@@ -225,7 +219,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       app_event_id = this.appEventId,
       app_time = appTime,
       job_id = jobId,
-      num_executors = this.currentScaleOut.get(),
+      num_executors = getScaleOutFromSparkContext,
       rescaling_time_ratio = rescalingTimeRatio,
       stages = stages
     )
@@ -251,7 +245,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val message = AppEndMessage(
       app_event_id = this.appEventId,
       app_time = appTime,
-      num_executors = this.currentScaleOut.get()
+      num_executors = getScaleOutFromSparkContext
     )
     this.zeroMQClient.sendMessage(EventType.APPLICATION_END, message)
   }
