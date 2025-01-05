@@ -25,7 +25,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   private val isAdaptive: Boolean = sparkConf.getBoolean("spark.customExtraListener.isAdaptive", defaultValue = true)
   private val bridgeServiceAddress: String = sparkConf.get("spark.customExtraListener.bridgeServiceAddress")
   private val active: Boolean = this.isAdaptive
-  private val executorRequestTimeout: Integer = Option(System.getenv("EXECUTOR_REQUEST_TIMEOUT")).getOrElse("10000").toInt
+  private val executorRequestTimeout: Integer = Option(System.getenv("EXECUTOR_REQUEST_TIMEOUT")).getOrElse("15000").toInt
   private val executorRequestStopWatch: StopWatch = StopWatch.create()
 
   // Setup communication
@@ -119,25 +119,36 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
   }
 
   private def adjustScaleOutIfNecessary(response: ResponseMessage): Unit = {
-    try {
-      val recommendedScaleOut = response.recommended_scale_out
-      if (recommendedScaleOut != this.lastKnownScaleOut.get()) {
+    val recommendedScaleOut = response.recommended_scale_out
 
-        if (!this.executorRequestStopWatch.isStopped) {
-          this.executorRequestStopWatch.stop()
-        }
-        // for fast jobs, we don't want to request different amounts of executors too often
-        if (this.executorRequestStopWatch.getTime(TimeUnit.MILLISECONDS) < this.executorRequestTimeout) {
-          return
-        }
+    logger.info(
+      "Will adjust scale-out if necessary: {}, recommended scale-out: {} last-known scale-out: {}",
+      (recommendedScaleOut != this.lastKnownScaleOut.get()).toString,
+      recommendedScaleOut.toString,
+      this.lastKnownScaleOut.get().toString
+    )
 
-        logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
-        val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
-        logger.info("Request acknowledged? => " + requestResult.toString)
-        this.executorRequestStopWatch.start()
+    if (recommendedScaleOut != this.lastKnownScaleOut.get()) {
+
+      if (!this.executorRequestStopWatch.isStopped) {
+        this.executorRequestStopWatch.stop()
       }
-    } catch {
-      case ex: Throwable => logger.error("An error occurred while trying to re-scale executors", ex)
+      // for fast jobs, we don't want to request different amounts of executors too often
+      if (this.executorRequestStopWatch.getTime(TimeUnit.MILLISECONDS) < this.executorRequestTimeout) {
+        logger.info(
+          "Too frequent requests...Stop-watch time: {} will not request additional executors",
+          this.executorRequestStopWatch.getTime(TimeUnit.MILLISECONDS)
+        )
+        this.executorRequestStopWatch.reset()
+        this.executorRequestStopWatch.start()
+        return
+      }
+
+      logger.info(s"Requesting scale-out of $recommendedScaleOut after next job...")
+      val requestResult = this.sparkContext.requestTotalExecutors(recommendedScaleOut, 0, Map[String, Int]())
+      logger.info("Request acknowledged? => " + requestResult.toString)
+      this.executorRequestStopWatch.reset()
+      this.executorRequestStopWatch.start()
     }
   }
 
