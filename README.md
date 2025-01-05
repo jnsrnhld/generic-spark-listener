@@ -1,4 +1,4 @@
-A generic spark listener which emits messages on spark events via a [ZeroMQ](https://zeromq.org/) socket.
+A generic spark listener which emits messages on spark events via a [ZeroMQ](https://zeromq.org/) socket. The listener is meant to talk to a runtime prediction/auto-scaling tool (like [Enel](https://ieeexplore.ieee.org/document/9679361) or [Ellis](https://ieeexplore.ieee.org/document/8241102)) which uses the runtime data info contained in the listener's emitted events to calculate an optimal scale-out for meeting a pre-defined runtime target of a Spark application.
 
 ```yaml
 # Add via "spark.extraListeners" in your SparkApplication definition
@@ -11,7 +11,7 @@ sparkConf:
 "spark.customExtraListener.maxExecutors": "{{ max_executors }}"
 ```
 
-The corresponding bridge service/event handler implementation must adhere to the following API:
+The corresponding prediction/auto-scaling tool implementation must adhere to the following API:
 
 ![Spark listener API](media/listener-sequence.svg)
 
