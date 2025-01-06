@@ -77,7 +77,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       if (isInitialJobOfSparkApplication(jobStart.jobId)) {
         sendJobStartMessage(jobStart.jobId, jobStart.time, this.initialScaleOut)
       } else {
-        sendJobStartMessage(jobStart.jobId, jobStart.time, getScaleOutFromSparkContext)
+        sendJobStartMessage(jobStart.jobId, jobStart.time, setAndGetLastKnownScaleOut())
       }
     this.stageInfoMap.addJob(jobStart)
     adjustScaleOutIfNecessary(response)
@@ -155,15 +155,21 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   private def handleScaleOutMonitoring(executorActionTime: Long): Unit = {
     synchronized {
-      val scaleOut = getScaleOutFromSparkContext
+      val scaleOut = getScaleOutFromSC
       scaleOutBuffer.append((scaleOut, executorActionTime))
     }
+  }
+
+  private def setAndGetLastKnownScaleOut(): Int = {
+    val currentScaleOut = getScaleOutFromSC
+    this.lastKnownScaleOut.set(currentScaleOut)
+    currentScaleOut
   }
 
   /**
    * Ensure spark context is set before calling.
    */
-  private def getScaleOutFromSparkContext: Int = {
+  private def getScaleOutFromSC: Int = {
 
     // last job event might be emitted after context is already terminated
     if (this.sparkContext.isStopped) {
@@ -172,13 +178,10 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
     val allExecutors = this.sparkContext.getExecutorMemoryStatus.toSeq.map(_._1)
     val driverHost: String = getDriverHost
-    val currentScaleOut = allExecutors
+    allExecutors
       .filter(!_.split(":")(0).equals(driverHost))
       .toList
       .length
-
-    this.lastKnownScaleOut.set(currentScaleOut)
-    currentScaleOut
   }
 
   private def checkConfigurations(sparkConf: SparkConf): Unit = {
@@ -231,7 +234,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       app_event_id = this.appEventId,
       app_time = appTime,
       job_id = jobId,
-      num_executors = getScaleOutFromSparkContext,
+      num_executors = setAndGetLastKnownScaleOut(),
       rescaling_time_ratio = rescalingTimeRatio,
       stages = stages
     )
@@ -258,7 +261,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     val message = AppEndMessage(
       app_event_id = this.appEventId,
       app_time = appTime,
-      num_executors = getScaleOutFromSparkContext
+      num_executors = setAndGetLastKnownScaleOut()
     )
     this.zeroMQClient.sendMessage(EventType.APPLICATION_END, message)
   }
