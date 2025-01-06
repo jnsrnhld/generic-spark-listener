@@ -104,6 +104,7 @@ class ZeroMQClientTest extends AnyFunSuite with Matchers {
       app_name = "Test Application",
       app_time = System.currentTimeMillis(),
       is_adaptive = true,
+      is_training = false,
       app_specs = specBuilder.buildAppSpecs(),
       driver_specs = specBuilder.buildDriverSpecs(),
       executor_specs = specBuilder.buildExecutorSpecs(),

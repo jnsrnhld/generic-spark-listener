@@ -23,8 +23,8 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
 
   // Listener configuration
   private val isAdaptive: Boolean = sparkConf.getBoolean("spark.customExtraListener.isAdaptive", defaultValue = true)
+  private val isTraining: Boolean = sparkConf.getBoolean("spark.customExtraListener.isTraining", defaultValue = false)
   private val bridgeServiceAddress: String = sparkConf.get("spark.customExtraListener.bridgeServiceAddress")
-  private val active: Boolean = this.isAdaptive
   private val executorRequestTimeout: Integer = Option(System.getenv("EXECUTOR_REQUEST_TIMEOUT")).getOrElse("15000").toInt
   private val executorRequestStopWatch: StopWatch = StopWatch.create()
 
@@ -244,6 +244,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
       app_name = this.appSignature,
       app_time = System.currentTimeMillis(),
       is_adaptive = this.isAdaptive,
+      is_training = this.isTraining,
       app_specs = specBuilder.buildAppSpecs(),
       driver_specs = specBuilder.buildDriverSpecs(),
       executor_specs = specBuilder.buildExecutorSpecs(),
