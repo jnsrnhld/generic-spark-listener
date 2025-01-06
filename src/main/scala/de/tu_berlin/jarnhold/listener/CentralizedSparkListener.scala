@@ -62,6 +62,7 @@ class CentralizedSparkListener(sparkConf: SparkConf) extends SparkListener {
     this.appEventId = response.app_event_id
     this.appStartTime = appStartTime
     this.initialScaleOut = response.recommended_scale_out
+    this.lastKnownScaleOut.set(this.initialScaleOut)
 
     logger.info(
       "SparkContext successfully registered in CentralizedSparkListener and executor recommendation received. "
